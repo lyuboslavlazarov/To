@@ -19,6 +19,7 @@ const CameraScanner = (() => {
   // само след като е излязла от кадъра поне GONE_MS – иначе карта, държана пред камерата,
   // би се отчела многократно (напр. многократно добавяне на точки).
   const GONE_MS = 4000;
+  let readyText = 'Насочете баркода в рамката';
   let last = { code: '', seen: 0 };
 
   function css() {
@@ -27,28 +28,35 @@ const CameraScanner = (() => {
     s.id = 'cam-css';
     s.textContent = `
       .cam-btn { flex: none; font-size: 1.2em; padding: 8px 14px; background: var(--accent2, #8ecae6); color: #0a2230; }
-      #camPanel { position: fixed; right: 16px; bottom: 16px; width: min(420px, calc(100vw - 32px)); z-index: 950;
+      #camPanel { position: fixed; right: 12px; bottom: 12px; width: 220px; z-index: 950; touch-action: none;
         background: var(--card, #1f2448); border: 2px solid var(--accent2, #8ecae6); border-radius: 16px; overflow: hidden;
         box-shadow: 0 10px 40px rgba(0,0,0,.6); }
-      #camPanel .cam-head { display: flex; align-items: center; gap: 6px; padding: 8px 10px; }
-      #camPanel .cam-head b { flex: 1; }
-      #camPanel .cam-head button { padding: 6px 10px; font-size: .9em; }
+      #camPanel.large { width: min(420px, calc(100vw - 24px)); }
+      #camPanel .cam-head { display: flex; align-items: center; gap: 4px; padding: 4px 6px; cursor: move; user-select: none; }
+      #camPanel .cam-head b { flex: 1; font-size: .85em; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+      #camPanel .cam-head button { padding: 3px 8px; font-size: .8em; cursor: pointer; }
+      #camPanel.large .cam-head { padding: 8px 10px; gap: 6px; }
+      #camPanel.large .cam-head b { font-size: 1em; }
+      #camPanel.large .cam-head button { padding: 6px 10px; font-size: .9em; }
+      #camPanel.dragging { opacity: .85; }
       #camPanel .cam-view { position: relative; background: #000; aspect-ratio: 4 / 3; }
       #camPanel video { width: 100%; height: 100%; object-fit: cover; display: block; }
       #camPanel video.mirror { transform: scaleX(-1); }
-      #camPanel .cam-frame { position: absolute; left: 6%; right: 6%; top: 28%; bottom: 28%; border: 3px solid rgba(255,255,255,.85);
+      #camPanel .cam-frame { position: absolute; left: 6%; right: 6%; top: 25%; bottom: 25%; border: 2px solid rgba(255,255,255,.85);
         border-radius: 10px; box-shadow: 0 0 0 999px rgba(0,0,0,.35); pointer-events: none; transition: border-color .15s; }
       #camPanel .cam-frame::after { content: ''; position: absolute; left: 4%; right: 4%; top: 50%; height: 2px; background: #ff5d73;
         animation: camline 1.6s ease-in-out infinite; }
       #camPanel .cam-frame.hit { border-color: #2ecc71; box-shadow: 0 0 0 999px rgba(46,204,113,.35); }
       @keyframes camline { 0%,100% { transform: translateY(-30px); } 50% { transform: translateY(30px); } }
-      #camPanel .cam-foot { display: flex; align-items: center; gap: 10px; padding: 8px 10px; font-size: .85em; }
+      #camPanel .cam-foot { display: flex; align-items: center; gap: 6px; padding: 4px 8px; font-size: .75em; }
+      #camPanel.large .cam-foot { gap: 10px; padding: 8px 10px; font-size: .85em; }
       #camPanel .cam-foot label { margin: 0; display: flex; align-items: center; gap: 6px; color: inherit; font-size: 1em; }
       #camPanel .cam-foot input { width: auto; }
-      #camPanel .cam-status { flex: 1; color: var(--muted, #9aa0c8); }
-      #camPanel .cam-msg { padding: 16px; line-height: 1.5; }
+      #camPanel .cam-status { flex: 1; min-width: 0; color: var(--muted, #9aa0c8); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+      #camPanel .cam-msg { padding: 10px; line-height: 1.4; font-size: .8em; }
+      #camPanel.large .cam-msg { padding: 16px; line-height: 1.5; font-size: 1em; }
       #camPanel .cam-msg a.btn { margin-top: 10px; }
-      @media (max-width: 600px) { #camPanel { right: 8px; left: 8px; bottom: 8px; width: auto; } }
+      @media (max-width: 600px) { #camPanel { width: 170px; } #camPanel.large { width: calc(100vw - 16px); } }
     `;
     document.head.appendChild(s);
   }
@@ -60,18 +68,66 @@ const CameraScanner = (() => {
     panel.id = 'camPanel';
     panel.hidden = true;
     panel.innerHTML = `
-      <div class="cam-head"><b>📷 Сканиране с камера</b>
+      <div class="cam-head" title="Преместете прозореца, като го хванете оттук"><b>📷 Камера</b>
         <button class="ghost" data-act="switch" title="Смени камерата">🔄</button>
+        <button class="ghost" data-act="size" title="По-голям / по-малък">⤢</button>
         <button class="ghost" data-act="close" title="Затвори">✕</button></div>
       <div class="cam-body"></div>
       <div class="cam-foot"><span class="cam-status"></span>
-        <label><input type="checkbox" data-act="keep"> Остави включена</label></div>`;
+        <label title="Камерата остава включена между сканиранията"><input type="checkbox" data-act="keep"> Включена</label></div>`;
     document.body.appendChild(panel);
     statusEl = panel.querySelector('.cam-status');
     panel.querySelector('[data-act=close]').addEventListener('click', () => close(true));
     panel.querySelector('[data-act=switch]').addEventListener('click', switchCamera);
     const keep = panel.querySelector('[data-act=keep]');
     keep.addEventListener('change', () => { opts.keepOpen = keep.checked; store.set('keep', keep.checked); });
+    panel.classList.toggle('large', !!store.get('large', false));
+    panel.querySelector('[data-act=size]').addEventListener('click', () => {
+      panel.classList.toggle('large');
+      store.set('large', panel.classList.contains('large'));
+      clampPosition();
+    });
+    enableDrag();
+  }
+
+  // ---- местене на прозореца (мишка или пръст); позицията се помни ----
+  function applyPosition(pos) {
+    if (!pos) return;
+    panel.style.left = pos.x + 'px';
+    panel.style.top = pos.y + 'px';
+    panel.style.right = 'auto';
+    panel.style.bottom = 'auto';
+  }
+  function clampPosition() {
+    if (!panel || panel.hidden || !panel.style.left) return;
+    const r = panel.getBoundingClientRect();
+    const x = Math.min(Math.max(0, r.left), Math.max(0, innerWidth - r.width));
+    const y = Math.min(Math.max(0, r.top), Math.max(0, innerHeight - r.height));
+    applyPosition({ x, y });
+    store.set('pos', { x, y });
+  }
+  function enableDrag() {
+    const head = panel.querySelector('.cam-head');
+    let start = null;
+    head.addEventListener('pointerdown', (e) => {
+      if (e.target.closest('button')) return;
+      const r = panel.getBoundingClientRect();
+      start = { px: e.clientX, py: e.clientY, x: r.left, y: r.top };
+      head.setPointerCapture(e.pointerId);
+      panel.classList.add('dragging');
+    });
+    head.addEventListener('pointermove', (e) => {
+      if (!start) return;
+      applyPosition({ x: start.x + e.clientX - start.px, y: start.y + e.clientY - start.py });
+    });
+    const end = () => { if (!start) return; start = null; panel.classList.remove('dragging'); clampPosition(); };
+    head.addEventListener('pointerup', end);
+    head.addEventListener('pointercancel', end);
+    head.addEventListener('dblclick', () => { // двоен клик – обратно в ъгъла
+      store.set('pos', null);
+      panel.style.left = panel.style.top = panel.style.right = panel.style.bottom = '';
+    });
+    addEventListener('resize', clampPosition);
   }
 
   function body(html) { panel.querySelector('.cam-body').innerHTML = html; }
@@ -162,11 +218,15 @@ const CameraScanner = (() => {
         let code = null;
         try { code = await detectOnce(); } catch { /* ignore */ }
         code = code && String(code).trim().toUpperCase();
+        if (!code && last.code && Date.now() - last.seen > GONE_MS && statusEl && statusEl.dataset.remove) {
+          delete statusEl.dataset.remove;
+          status(readyText);
+        }
         if (code) {
           const nowMs = Date.now();
           const stillInView = code === last.code && nowMs - last.seen < GONE_MS;
           last = { code, seen: nowMs };
-          if (stillInView) status('Махнете картата от камерата');
+          if (stillInView) { status('Махнете картата'); statusEl.dataset.remove = '1'; }
           else await hit(code);
           last.seen = Date.now();
         }
@@ -241,6 +301,8 @@ const CameraScanner = (() => {
   async function open() {
     buildPanel();
     panel.hidden = false;
+    applyPosition(store.get('pos', null));
+    clampPosition();
     panel.querySelector('[data-act=keep]').checked = !!opts.keepOpen;
     status('');
     if (!window.isSecureContext || !navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
@@ -258,7 +320,8 @@ const CameraScanner = (() => {
       await makeDetector();
       await startStream();
       store.set('open', true);
-      status(detector ? 'Насочете баркода в рамката' : 'Насочете баркода в рамката (дръжте го хоризонтално)');
+      readyText = detector ? 'Насочете баркода в рамката' : 'Баркодът – хоризонтално в рамката';
+      status(readyText);
       loop();
     } catch (e) {
       stopStream();
