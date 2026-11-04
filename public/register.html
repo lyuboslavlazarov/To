@@ -16,13 +16,25 @@
   <section>
     <div class="scan"><span class="icon">▥</span><input id="scan" placeholder="Сканирайте баркода на картата…" autocomplete="off"></div>
 
-    <div id="empty" class="panel center" style="margin-top:20px; padding:50px">
-      <div class="huge pulse">▥</div>
-      <p class="big">Сканирайте карта</p>
-      <p class="muted">Въведете данните на играещия и регистрирайте плащането за вход.</p>
+    <div class="row panel" style="margin-top:12px; padding:10px 16px">
+      <label style="margin:0; display:flex; align-items:center; gap:8px; color:var(--text); font-size:1em">
+        <input type="checkbox" id="auto" style="width:auto; transform:scale(1.4)"> Записвай вход автоматично при сканиране
+      </label>
+      <div class="grow"></div>
+      <label for="fee" style="margin:0">Цена на вход</label>
+      <input id="fee" type="number" min="0" step="0.01" style="width:110px">
+      <span id="cur"></span>
     </div>
 
-    <form id="form" class="panel hidden" style="margin-top:20px" autocomplete="off">
+    <div id="result" class="hidden" style="margin-top:16px"></div>
+
+    <div id="empty" class="panel center" style="margin-top:16px; padding:40px">
+      <div class="huge pulse">▥</div>
+      <p class="big">Сканирайте карта</p>
+      <p class="muted" id="emptyHint"></p>
+    </div>
+
+    <form id="form" class="panel hidden" style="margin-top:16px" autocomplete="off">
       <div class="row">
         <h2 class="grow" style="margin:0">Карта <span id="code"></span></h2>
         <span id="statusBadge"></span>
@@ -55,15 +67,12 @@
       </div>
 
       <div class="row" style="margin-top:20px">
-        <div style="width:160px">
-          <label for="fee">Цена на вход</label>
-          <input id="fee" type="number" min="0" step="0.01">
-        </div>
+        <button type="button" class="ghost" id="cancel">✕ Затвори</button>
         <div class="grow"></div>
-        <button type="button" class="ghost xl" id="saveOnly">💾 Само запази</button>
-        <button type="button" class="primary xl" id="saveEntry">✅ Запази и регистрирай вход</button>
+        <button type="button" class="ghost xl" id="saveInfo">💾 Запази данните</button>
+        <button type="button" class="primary xl" id="saveEntry">✅ Регистрирай вход</button>
       </div>
-      <p class="muted small">Сумата за вход се записва само за статистика – не се въвежда в оборот и не се превръща в точки<span id="entryPtsInfo"></span>.</p>
+      <p class="muted small">Enter = <span id="enterAction"></span>. Сумата за вход се записва само за статистика – не се въвежда в оборот и не се превръща в точки<span id="entryPtsInfo"></span>.</p>
     </form>
   </section>
 
@@ -77,18 +86,48 @@
 <script src="/camera.js"></script>
 <script>
 let settings = {};
-let current = null;
+let current = null;      // баркод на отворената карта
+let currentCard = null;  // данни от сървъра (null = нова карта)
+let enteredNow = false;  // вход, записан при това сканиране
 const STATION = station('Вход');
+
+function getAuto() { try { return localStorage.getItem('register:auto') !== '0'; } catch { return true; } }
+function setAuto(v) { try { localStorage.setItem('register:auto', v ? '1' : '0'); } catch { /* ignore */ } }
+
+function feeText() { return money($('#fee').value || settings.entry_fee, settings.currency); }
 
 async function loadSettings() {
   settings = await api('GET', '/api/settings');
   $('#fee').value = settings.entry_fee;
-  $('#saveEntry').textContent = `✅ Запази и регистрирай вход`;
+  $('#cur').textContent = settings.currency;
   $('#entryPtsInfo').textContent = Number(settings.entry_points) > 0 ? ` (при вход картата получава ${settings.entry_points} начални точки)` : '';
+  updateHints();
 }
 
-function show(card, code) {
+function updateHints() {
+  $('#emptyHint').textContent = $('#auto').checked
+    ? `При сканиране входът (${feeText()}) се записва веднага. После може да въведете или поправите данните на играещия.`
+    : 'Сканирайте картата, въведете данните и натиснете „Регистрирай вход“.';
+  updateButtons();
+}
+
+function updateButtons() {
+  const c = currentCard;
+  const btn = $('#saveEntry');
+  if (enteredNow) {
+    btn.classList.add('hidden');
+  } else {
+    btn.classList.remove('hidden');
+    btn.textContent = c && c.entered_today ? `➕ Още един вход (${feeText()})` : `✅ Регистрирай вход (${feeText()})`;
+    btn.className = 'xl ' + (c && c.entered_today ? 'ghost' : 'primary');
+  }
+  const enterIsEntry = !enteredNow && !(c && c.entered_today);
+  $('#enterAction').textContent = enterIsEntry ? 'запази и регистрирай вход' : 'запази данните';
+}
+
+function fillForm(card, code) {
   current = code;
+  currentCard = card;
   $('#empty').classList.add('hidden');
   $('#form').classList.remove('hidden');
   $('#code').textContent = code;
@@ -97,7 +136,6 @@ function show(card, code) {
   $('#phone').value = c.phone || '';
   $('#age').value = c.age ?? '';
   $('#note').value = c.note || '';
-  $('#fee').value = settings.entry_fee;
   $('#sVisits').textContent = c.visits || 0;
   $('#sPaid').textContent = money(c.entry_paid, settings.currency);
   $('#sPlays').textContent = c.plays || 0;
@@ -106,20 +144,100 @@ function show(card, code) {
   let b = '';
   if (!card) b = '<span class="badge warn">НОВА КАРТА</span>';
   else if (c.blocked) b = '<span class="badge bad">БЛОКИРАНА</span>';
-  else if (c.entered_today) b = '<span class="badge ok">ВЕЧЕ Е ВЛЯЗЪЛ ДНЕС</span>';
+  else if (enteredNow) b = '<span class="badge ok">ВХОДЪТ Е ЗАПИСАН</span>';
+  else if (c.entered_today) b = '<span class="badge warn">ВЕЧЕ Е ВЛЯЗЪЛ ДНЕС</span>';
   $('#statusBadge').innerHTML = b;
-  $('#name').focus();
+  updateButtons();
+  // курсорът отива в „Име“ само ако името липсва
+  if (!c.name) $('#name').focus(); else $('#scan').focus();
+}
+
+function showResult(kind, html) {
+  const r = $('#result');
+  r.className = 'result ' + kind;
+  r.style.marginTop = '16px';
+  r.innerHTML = html;
+}
+
+function entryResult(card, visitId) {
+  showResult('ok', `<div class="row">
+      <div class="grow"><div class="big ok">✅ Вход записан: ${money(card.last_amount ?? $('#fee').value, settings.currency)}</div>
+      <div>${esc(card.name || 'Без име')} · <b>${esc(card.barcode)}</b> · вход №${card.visits} · ${fmtTime(card.last_visit)}</div></div>
+      <button class="ghost sm" id="undoEntry">↩ Отмени входа</button></div>`);
+  $('#undoEntry').addEventListener('click', async () => {
+    if (!confirm('Да се отмени ли записаният вход?')) return;
+    try {
+      const r = await api('POST', `/api/visits/${visitId}/void`, {});
+      showResult('', `<div class="big">↩ Входът за ${esc(card.barcode)} е отменен.</div>`);
+      if (current === card.barcode) { enteredNow = false; fillFormKeep(r.card); }
+      loadRecent();
+    } catch (e) { toast(e.message, 'bad', 4000); }
+  });
+}
+
+// обновява статистиката на картата, без да трие въведеното в полетата
+function fillFormKeep(card) {
+  const vals = { name: $('#name').value, phone: $('#phone').value, age: $('#age').value, note: $('#note').value };
+  fillForm(card, card.barcode);
+  for (const [k, v] of Object.entries(vals)) $('#' + k).value = v;
+}
+
+async function registerEntry(code) {
+  const r = await api('POST', '/api/entry', { barcode: code, amount: $('#fee').value, station: STATION });
+  r.card.last_amount = Number($('#fee').value || settings.entry_fee);
+  enteredNow = true;
+  entryResult(r.card, r.visit_id);
+  loadRecent();
+  return r.card;
 }
 
 async function onScan(code) {
+  // ако предишната карта има незапазени промени в данните – запазваме ги
+  await autosavePrevious();
+  enteredNow = false;
+  let card = null;
   try {
-    const card = await api('GET', '/api/cards/' + encodeURIComponent(code));
-    beep(true);
-    show(card, code);
+    card = await api('GET', '/api/cards/' + encodeURIComponent(code));
   } catch (e) {
-    if (e.status === 404) { beep(true); show(null, code); toast('Нова карта – въведете данните', 'info'); }
-    else { beep(false); toast(e.message, 'bad'); }
+    if (e.status !== 404) { beep(false); showResult('bad', `<div class="big bad">✖ ${esc(e.message)}</div>`); return; }
   }
+  if (card && card.blocked) {
+    beep(false);
+    showResult('bad', `<div class="big bad">✖ Картата ${esc(code)} е блокирана</div>`);
+    fillForm(card, code);
+    return;
+  }
+  try {
+    if ($('#auto').checked && !(card && card.entered_today)) {
+      if (!card) card = await api('PUT', '/api/cards/' + encodeURIComponent(code), {}); // нова карта
+      card = await registerEntry(code);
+      beep(true);
+    } else if (card && card.entered_today) {
+      beep(true);
+      showResult('', `<div class="big warn">⚠ ${esc(card.name || code)} вече има вход днес (${fmtTime(card.last_visit)}).</div>
+        <div class="muted">Нов вход не е записан. Ако е платил отново, натиснете „Още един вход“.</div>`);
+    } else {
+      beep(true);
+      $('#result').className = 'hidden';
+      if (!card) toast('Нова карта – въведете данните', 'info');
+    }
+  } catch (e) {
+    beep(false);
+    showResult('bad', `<div class="big bad">✖ Входът НЕ е записан: ${esc(e.message)}</div>`);
+  }
+  fillForm(card, code);
+}
+
+function snapshot() { return JSON.stringify([$('#name').value, $('#phone').value, $('#age').value, $('#note').value]); }
+async function autosavePrevious() {
+  if (!current || $('#form').classList.contains('hidden')) return;
+  const snap = snapshot();
+  const c = currentCard || {};
+  if (snap === JSON.stringify([c.name || '', c.phone || '', String(c.age ?? ''), c.note || ''])) return;
+  try {
+    await api('PUT', '/api/cards/' + encodeURIComponent(current), { name: $('#name').value, phone: $('#phone').value, age: $('#age').value, note: $('#note').value });
+    toast(`Данните за ${current} са запазени`, 'ok');
+  } catch (e) { toast(`Данните за ${current} НЕ са запазени: ${e.message}`, 'bad', 5000); }
 }
 
 async function save(withEntry) {
@@ -130,20 +248,19 @@ async function save(withEntry) {
     if (withEntry) {
       if (card.blocked) throw new Error('Картата е блокирана');
       if (card.entered_today && !confirm(`${card.name || current} вече има регистриран вход днес. Регистрирай още един?`)) return;
-      const r = await api('POST', '/api/entry', { barcode: current, amount: $('#fee').value, station: STATION });
-      card = r.card;
-      toast(`Вход #${card.visits} за ${card.name || current} ✔`, 'ok');
-    } else {
-      toast('Данните са запазени', 'ok');
+      card = await registerEntry(current);
+    } else if (!enteredNow) {
+      showResult('ok', `<div class="big ok">💾 Данните за ${esc(card.barcode)} са запазени</div><div class="muted">Вход не е записан.</div>`);
     }
     beep(true);
     reset();
-    loadRecent();
   } catch (e) { beep(false); toast(e.message, 'bad', 4000); }
 }
 
 function reset() {
   current = null;
+  currentCard = null;
+  enteredNow = false;
   $('#form').classList.add('hidden');
   $('#empty').classList.remove('hidden');
   $('#scan').focus();
@@ -159,10 +276,20 @@ async function loadRecent() {
   } catch { /* ignore */ }
 }
 
-// Enter в полетата не изпраща формата (скенерът натиска Enter автоматично)
 $('#form').addEventListener('submit', (e) => e.preventDefault());
+// Enter в полетата на формата: основното действие (ако е скенер – common.js го прихваща преди това)
+$('#form').addEventListener('keydown', (e) => {
+  if (e.key !== 'Enter' || e.target.tagName === 'BUTTON') return;
+  e.preventDefault();
+  const enterIsEntry = !enteredNow && !(currentCard && currentCard.entered_today);
+  save(enterIsEntry);
+});
 $('#saveEntry').addEventListener('click', () => save(true));
-$('#saveOnly').addEventListener('click', () => save(false));
+$('#saveInfo').addEventListener('click', () => save(false));
+$('#cancel').addEventListener('click', reset);
+$('#auto').checked = getAuto();
+$('#auto').addEventListener('change', () => { setAuto($('#auto').checked); updateHints(); });
+$('#fee').addEventListener('input', updateHints);
 document.addEventListener('keydown', (e) => { if (e.key === 'Escape') reset(); });
 
 loadSettings().then(loadRecent);

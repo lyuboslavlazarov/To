@@ -83,10 +83,40 @@ function bindScanner(input, onScan, cameraOptions = {}) {
   });
   // Бутон 📷 – сканиране с камерата на устройството
   if (typeof CameraScanner !== 'undefined' && cameraOptions !== false) CameraScanner.attach(input, run, cameraOptions);
+
+  // Скенер, докато курсорът е в друго поле (напр. „Име“): скенерът „пише“ много по-бързо
+  // от човек. Бърза поредица от символи + Enter се приема за сканиране – текстът се
+  // маха от полето и картата се обработва нормално.
+  const SCAN_GAP_MS = 45;
+  let burst = null;
+  document.addEventListener('keydown', (e) => {
+    const el = e.target;
+    if (el === input || !(el instanceof HTMLInputElement || el instanceof HTMLTextAreaElement)) return;
+    if (el instanceof HTMLInputElement && ['checkbox', 'radio', 'button', 'submit', 'date'].includes(el.type)) return;
+    const t = performance.now();
+    if (e.key === 'Enter') {
+      const isScan = burst && burst.el === el && burst.chars.length >= 4 && t - burst.last < 100;
+      if (isScan) {
+        e.preventDefault();
+        e.stopImmediatePropagation();
+        el.value = burst.before;
+        const code = burst.chars.trim().toUpperCase();
+        burst = null;
+        run(code);
+      }
+      burst = null;
+      return;
+    }
+    if (e.key.length !== 1 || e.ctrlKey || e.metaKey || e.altKey) { burst = null; return; }
+    if (!burst || burst.el !== el || t - burst.last > SCAN_GAP_MS) burst = { el, chars: '', before: el.value, last: t };
+    burst.chars += e.key;
+    burst.last = t;
+  }, true);
   // Връщане на фокуса, ако потребителят не пише в друго поле
   const refocus = () => {
     const a = document.activeElement;
-    const typing = a && a !== input && (a.tagName === 'INPUT' || a.tagName === 'TEXTAREA' || a.tagName === 'SELECT');
+    const textual = a && ((a.tagName === 'INPUT' && !['checkbox', 'radio', 'button', 'submit', 'range', 'color'].includes(a.type)) || a.tagName === 'TEXTAREA' || a.tagName === 'SELECT');
+    const typing = a && a !== input && textual;
     if (!typing && !document.querySelector('.modal-bg')) input.focus({ preventScroll: true });
   };
   setInterval(refocus, 800);
