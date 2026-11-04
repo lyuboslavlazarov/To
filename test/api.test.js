@@ -97,3 +97,22 @@ test('корекция и анулиране на игра', async () => {
   r = await call('POST', `/api/plays/${p.play_id}/void`, {});
   assert.equal(r.data.card.balance, 50);
 });
+
+test('резервно копие в избрана папка', async () => {
+  const bdir = path.join(dir, 'Google Drive', 'Lunapark backup');
+  let r = await call('PUT', '/api/settings', { backup_dir: bdir, backup_interval: 30 });
+  assert.equal(r.status, 200);
+  r = await call('POST', '/api/backup');
+  assert.equal(r.status, 200);
+  assert.ok(fs.existsSync(r.data.file));
+  assert.equal(r.data.files.length, 1);
+  assert.equal(r.data.interval, 30);
+  // копието е валидна база със същите карти
+  const { DatabaseSync } = require('node:sqlite');
+  const copy = new DatabaseSync(r.data.file, { readOnly: true });
+  assert.ok(copy.prepare('SELECT COUNT(*) AS n FROM cards').get().n >= 600);
+  copy.close();
+  // невалидна папка се отказва
+  r = await call('PUT', '/api/settings', { backup_dir: path.join(process.env.DB_FILE, 'x') });
+  assert.equal(r.status, 400);
+});

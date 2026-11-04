@@ -4,6 +4,7 @@ const fs = require('node:fs');
 const path = require('node:path');
 const os = require('node:os');
 const { db, tx, DB_FILE } = require('./db');
+const backup = require('./backup');
 
 const PORT = Number(process.env.PORT) || 3000;
 const ADMIN_PIN = process.env.ADMIN_PIN || '';
@@ -102,16 +103,27 @@ route('GET', '/api/ping', () => ({ ok: true, time: now(), admin_pin: !!ADMIN_PIN
 // Настройки
 route('GET', '/api/settings', () => getSettings());
 route('PUT', '/api/settings', ({ body }) => {
-  const allowed = ['park_name', 'entry_fee', 'entry_points', 'currency'];
+  const allowed = ['park_name', 'entry_fee', 'entry_points', 'currency', 'backup_dir', 'backup_interval'];
   const up = db.prepare('INSERT INTO settings(key,value) VALUES(?,?) ON CONFLICT(key) DO UPDATE SET value=excluded.value');
   for (const k of allowed) {
     if (body[k] === undefined) continue;
     let v = str(body[k], 100);
     if (k === 'entry_fee') { const n = Number(v); if (!(n >= 0)) throw bad('Невалидна цена на вход'); v = String(n); }
     if (k === 'entry_points') v = String(int(v, 'начални точки', { min: 0, max: 100000 }));
+    if (k === 'backup_interval') v = String(int(v, 'интервал', { min: 5, max: 1440 }));
+    if (k === 'backup_dir') {
+      v = str(body[k], 500);
+      if (v) { try { backup.checkDir(backup.expandDir(v)); } catch (e) { throw bad(e.message); } }
+    }
     up.run(k, v);
   }
   return getSettings();
+}, { admin: true });
+
+// Резервни копия
+route('GET', '/api/backup', () => backup.status(), { admin: true });
+route('POST', '/api/backup', () => {
+  try { return { file: backup.runBackup(), ...backup.status() }; } catch (e) { throw bad('Неуспешно копие: ' + e.message); }
 }, { admin: true });
 
 // Карти
@@ -482,6 +494,7 @@ const server = http.createServer(async (req, res) => {
 });
 
 if (require.main === module) {
+  backup.start();
   server.listen(PORT, '0.0.0.0', () => {
     console.log(`\n🎡 Лунапарк сървърът работи на порт ${PORT}`);
     console.log(`   База данни: ${DB_FILE}`);
@@ -489,6 +502,7 @@ if (require.main === module) {
     for (const list of Object.values(os.networkInterfaces())) {
       for (const n of list || []) if (n.family === 'IPv4' && !n.internal) console.log(`   В мрежата:  http://${n.address}:${PORT}`);
     }
+    console.log(`   Резервни копия: ${backup.status().effective_dir} (на всеки ${backup.status().interval} мин.)`);
     if (!ADMIN_PIN) console.log('   ⚠  ADMIN_PIN не е зададен – администрацията е без парола.');
     console.log('');
   });

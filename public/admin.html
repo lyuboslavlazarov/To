@@ -113,6 +113,29 @@
         <div class="row"><button class="primary" id="genBtn">Генерирай</button><button class="ghost" id="genPrint">🖨 Печат на тези баркодове</button></div>
       </div>
     </div>
+
+    <div class="panel" style="margin-top:20px">
+      <h3>💾 Автоматично резервно копие</h3>
+      <p class="muted small">Приложението копира всички данни (карти, точки, статистика) в избраната папка автоматично и при спиране. Изберете папка в Google Drive или iCloud и копията ще се качват в облака сами. Пази се по едно копие на ден за последните 30 дни.</p>
+      <div id="bkSuggest" class="row" style="margin:8px 0"></div>
+      <div class="row">
+        <div class="grow"><label>Папка за копията (празно = папката на приложението)</label><input id="bkDir" placeholder=""></div>
+        <div style="width:200px"><label>Колко често</label>
+          <select id="bkInt">
+            <option value="15">на 15 минути</option>
+            <option value="30">на 30 минути</option>
+            <option value="60">на 1 час</option>
+            <option value="180">на 3 часа</option>
+          </select>
+        </div>
+      </div>
+      <div class="row" style="margin-top:12px">
+        <button class="primary" id="bkSave">Запази</button>
+        <button id="bkNow">Направи копие сега</button>
+      </div>
+      <p id="bkStatus" style="margin-top:12px"></p>
+      <table><thead><tr><th>Файл</th><th>Размер</th><th>Последна промяна</th></tr></thead><tbody id="bkFiles"></tbody></table>
+    </div>
   </section>
 </main>
 
@@ -329,7 +352,42 @@ async function loadSettingsTab() {
   settings = await api('GET', '/api/settings');
   $('#sName').value = settings.park_name; $('#sFee').value = settings.entry_fee; $('#sCur').value = settings.currency; $('#sPts').value = settings.entry_points;
   genPreview();
+  loadBackup();
 }
+
+// ---------- резервни копия ----------
+function fmtSize(b) { return b > 1048576 ? (b / 1048576).toFixed(1) + ' MB' : Math.max(1, Math.round(b / 1024)) + ' KB'; }
+function renderBackup(s) {
+  $('#bkDir').value = s.dir;
+  $('#bkDir').placeholder = s.default_dir;
+  const sel = $('#bkInt');
+  if (![...sel.options].some((o) => Number(o.value) === s.interval)) sel.add(new Option(`на ${s.interval} минути`, s.interval));
+  sel.value = String(s.interval);
+  $('#bkSuggest').innerHTML = s.suggestions.length
+    ? '<span class="muted small">Открити облачни папки:</span> ' + s.suggestions.map((x, i) => `<button class="ghost sm" data-sug="${i}">☁️ ${esc(x.label)}</button>`).join('')
+    : '<span class="muted small">Не е открит Google Drive / iCloud на този компютър. Инсталирайте „Google Drive for desktop“ или включете iCloud Drive, после презаредете страницата.</span>';
+  $$('[data-sug]').forEach((b) => b.addEventListener('click', () => { $('#bkDir').value = s.suggestions[Number(b.dataset.sug)].path; toast('Натиснете „Запази“', 'info'); }));
+  $('#bkStatus').innerHTML = (s.error ? `<span class="bad">⚠ Грешка: ${esc(s.error)}</span><br>` : '')
+    + (s.last ? `<span class="ok">✔ Последно копие: ${esc(s.last)}</span>` : '<span class="muted">Още няма копие от това стартиране.</span>')
+    + `<br><span class="muted small">Копията се записват в: ${esc(s.effective_dir)}</span>`;
+  $('#bkFiles').innerHTML = s.files.slice(0, 10).map((f) => `<tr><td>${esc(f.name)}</td><td>${fmtSize(f.size)}</td><td>${new Date(f.modified).toLocaleString('bg-BG')}</td></tr>`).join('')
+    || '<tr><td class="muted" colspan="3">Няма копия в тази папка</td></tr>';
+}
+async function loadBackup() {
+  try { renderBackup(await api('GET', '/api/backup')); } catch (e) { toast(e.message, 'bad'); }
+}
+$('#bkSave').addEventListener('click', async () => {
+  try {
+    await api('PUT', '/api/settings', { backup_dir: $('#bkDir').value, backup_interval: $('#bkInt').value });
+    renderBackup(await api('POST', '/api/backup'));
+    toast('Запазено. Направено е първо копие в новата папка.', 'ok', 4000);
+  } catch (e) { toast(e.message, 'bad', 6000); loadBackup(); }
+});
+$('#bkNow').addEventListener('click', async () => {
+  try { renderBackup(await api('POST', '/api/backup')); toast('Копието е направено', 'ok'); }
+  catch (e) { toast(e.message, 'bad', 6000); loadBackup(); }
+});
+
 $('#sSave').addEventListener('click', async () => {
   try {
     settings = await api('PUT', '/api/settings', { park_name: $('#sName').value, entry_fee: $('#sFee').value, currency: $('#sCur').value, entry_points: $('#sPts').value });
