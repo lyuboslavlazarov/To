@@ -128,6 +128,7 @@ function createPublicHandler(d) {
       park_name: s.park_name,
       currency: s.currency,
       plays_per_entry: Number(s.plays_per_entry) || 0,
+      virtual_signup: process.env.VIRTUAL_SIGNUP === '1',
       games: db.prepare('SELECT name, points FROM games WHERE active=1 ORDER BY name').all(),
       products: db.prepare('SELECT name, category, points FROM products WHERE active=1 ORDER BY category, sort, name').all(),
     };
@@ -160,6 +161,9 @@ function createPublicHandler(d) {
 
   // Регистрация в приложението: нов виртуален потребител с виртуална карта (V + 6 цифри)
   route('POST', '/api/public/register', ({ body, ip, req }) => {
+    // по подразбиране клиентите получават физическа карта на касата; регистрация само с карта
+    // в приложението се включва с VIRTUAL_SIGNUP=1
+    if (process.env.VIRTUAL_SIGNUP !== '1') throw new HttpError(403, 'Вземете карта от касата и я сканирайте в приложението');
     if (!allow('reg:' + ip, 5, 60 * 60e3)) throw new HttpError(429, 'Твърде много регистрации от тази мрежа. Опитайте по-късно.');
     const name = str(body.name, 200);
     const phone = str(body.phone, 40);
@@ -184,8 +188,10 @@ function createPublicHandler(d) {
 
   route('GET', '/api/public/me', ({ req }) => cardView(sessionCard(req)));
 
-  // Клиентът сам изпраща/поправя данните си
+  // Данните на играещия се въвеждат от служителя на входа. Клиентът може да ги променя от
+  // приложението само ако е включено с CUSTOMER_EDIT=1.
   route('PUT', '/api/public/me', ({ req, body, ip }) => {
+    if (process.env.CUSTOMER_EDIT !== '1') throw new HttpError(403, 'Данните се въвеждат от служителя на входа');
     if (!allow('upd:' + ip, 20, 10 * 60e3)) throw new HttpError(429, 'Твърде много промени. Опитайте по-късно.');
     const c = sessionCard(req);
     const name = str(body.name, 200);

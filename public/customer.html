@@ -59,13 +59,13 @@
     <div class="panel center" style="margin-top:6px">
       <div style="font-size:56px">🎟️</div>
       <h2 style="margin-bottom:6px">Добре дошли!</h2>
-      <p class="muted" style="margin-top:0">Картата ви за лунапарка – в телефона.</p>
-      <div class="seg" style="margin:14px 0">
-        <button class="active" data-mode="new">Нов съм</button>
-        <button data-mode="have">Имам карта</button>
+      <p class="muted" style="margin-top:0">Добавете картата си от лунапарка и следете точките, игрите и менюто.</p>
+      <div class="seg hidden" id="modeSeg" style="margin:14px 0">
+        <button data-mode="have" class="active">Имам карта</button>
+        <button data-mode="new">Нов съм</button>
       </div>
 
-      <form id="regForm" style="text-align:left" autocomplete="on">
+      <form id="regForm" class="hidden" style="text-align:left" autocomplete="on">
         <label for="rName">Име и фамилия</label><input id="rName" autocomplete="name" maxlength="200" required>
         <label for="rPhone">Телефон</label><input id="rPhone" autocomplete="tel" inputmode="tel" maxlength="40" required placeholder="0888 123 456">
         <label for="rAge">Възраст (по желание)</label><input id="rAge" type="number" min="0" max="120" inputmode="numeric">
@@ -76,15 +76,16 @@
         <p class="muted small">Ще получите виртуална карта в телефона. На касата плащате входа, като покажете телефона, и получавате и резервна физическа карта – ако батерията падне.</p>
       </form>
 
-      <div id="haveBox" class="hidden" style="text-align:left">
-        <p class="muted small">Сканирайте баркода на картата си (📷) или въведете номера ѝ.</p>
+      <div id="haveBox" style="text-align:left">
+        <button class="primary big-btn" id="scanBtn" style="margin-top:6px; font-size:1.3em; padding:20px">📷 Сканирай картата си</button>
+        <p class="muted small center" style="margin:14px 0 6px">или въведете номера от картата</p>
         <div class="scan"><span class="icon">▥</span><input id="code" placeholder="напр. LP0001" autocomplete="off" autocapitalize="characters"></div>
         <div id="phoneBox" class="hidden" style="margin-top:12px">
           <label for="phone4">Последните 4 цифри от телефона, записан към картата</label>
           <input id="phone4" inputmode="numeric" maxlength="4" placeholder="••••" style="font-size:1.4em; letter-spacing:6px; text-align:center">
         </div>
         <button class="primary big-btn" id="loginBtn" style="margin-top:14px">Добави картата</button>
-        <p class="muted small">Може да добавите картите на цялото семейство.</p>
+        <p class="muted small">Картата се запомня в този телефон – следващия път приложението се отваря направо с нея. Може да добавите картите на цялото семейство.</p>
       </div>
     </div>
   </section>
@@ -107,7 +108,7 @@
     <div class="panel" style="margin-top:12px" id="backupBox"></div>
     <div id="protect" class="panel hidden" style="margin-top:12px; border-color:var(--warn)">
       <b>🔒 Защитете картата си</b>
-      <p class="muted small">Попълнете името и телефона си в „Профил“ – после картата ще може да се добави само с последните 4 цифри от вашия телефон.</p>
+      <p class="muted small">Помолете служителя на входа да запише телефона ви към картата – после тя ще може да се добави в друг телефон само с последните 4 цифри от него.</p>
     </div>
   </section>
 
@@ -127,12 +128,8 @@
   <section id="p-me" class="page">
     <div class="panel">
       <h3>👤 Моите данни</h3>
-      <form id="meForm" autocomplete="on">
-        <label for="mName">Име и фамилия</label><input id="mName" autocomplete="name" maxlength="200">
-        <label for="mPhone">Телефон</label><input id="mPhone" autocomplete="tel" inputmode="tel" maxlength="40">
-        <label for="mAge">Възраст</label><input id="mAge" type="number" min="0" max="120" inputmode="numeric">
-        <button class="primary big-btn" type="submit" style="margin-top:14px">💾 Изпрати данните</button>
-      </form>
+      <div id="meData"></div>
+      <p class="muted small" style="margin-top:10px">Данните се въвеждат от служителя на входа. За промяна се обърнете към него.</p>
     </div>
     <div class="panel" style="margin-top:12px">
       <h3>📱 Приложението</h3>
@@ -256,6 +253,7 @@ $('#loginBtn').addEventListener('click', () => login());
 $('#code').addEventListener('keydown', (e) => { if (e.key === 'Enter') { e.preventDefault(); login(); } });
 $('#phone4').addEventListener('keydown', (e) => { if (e.key === 'Enter') { e.preventDefault(); login(); } });
 CameraScanner.attach($('#code'), (c) => login(c), { keepOpen: false, facing: 'environment' });
+$('#scanBtn').addEventListener('click', () => { const b = document.querySelector('#haveBox .cam-btn'); if (b) b.click(); });
 
 // ---- показване на карта ----
 async function openCard(barcode) {
@@ -324,23 +322,12 @@ function show(v, fromCache) {
   ].sort((a, b) => b.ts.localeCompare(a.ts)).map((x) => x.h).join('') || '<p class="muted">Няма история</p>';
   $('#menu').innerHTML = info.products.map((p) => `<div class="menu-item ${p.points > v.balance ? 'no' : ''}"><span>${esc(p.name)} <span class="muted small">${esc(p.category)}</span></span><b>${p.points} т. ${p.points <= v.balance ? '✓' : ''}</b></div>`).join('') || '<p class="muted">Няма продукти</p>';
   $('#gameList').innerHTML = info.games.map((x) => li(esc(x.name), `до ${x.points} т.`)).join('') || '<p class="muted">Няма игри</p>';
-  if (!document.activeElement || !document.activeElement.closest('#meForm')) {
-    $('#mName').value = v.name || ''; $('#mPhone').value = ''; $('#mPhone').placeholder = v.phone_masked ? `записан: ${v.phone_masked}` : '0888 123 456'; $('#mAge').value = v.age ?? '';
-  }
+  $('#meData').innerHTML = li('Име', `<b>${esc(v.name || '—')}</b>`) + li('Телефон', esc(v.phone_masked || '—'))
+    + li('Възраст', esc(v.age ?? '—')) + li('Карта', `<b>${esc(v.barcode)}</b>`)
+    + (v.linked && v.linked.length ? li('Свързана карта', esc(v.linked.join(', '))) : '')
+    + li('Посещения', v.visits) + li('Изиграни игри', v.plays_total);
 }
 
-$('#meForm').addEventListener('submit', async (e) => {
-  e.preventDefault();
-  if (!current) return;
-  const phone = $('#mPhone').value;
-  if (!phone && current.view && current.view.has_phone) { toast('Въведете телефона отново, за да потвърдите промяната', 'info', 4000); $('#mPhone').focus(); return; }
-  try {
-    const v = await call('PUT', '/api/public/me', { name: $('#mName').value, phone, age: $('#mAge').value }, current.token);
-    document.activeElement.blur();
-    toast('Данните са изпратени ✔', 'ok');
-    show(v);
-  } catch (err) { toast(err.message, 'bad', 5000); }
-});
 $('#addCardBtn').addEventListener('click', showWelcome);
 $('#removeCard').addEventListener('click', async () => {
   if (!current || !confirm('Да премахна ли тази карта от телефона? Може да я добавите отново с номера ѝ.')) return;
@@ -366,7 +353,7 @@ addEventListener('offline', () => $('#offline').classList.remove('hidden'));
 
 (async () => {
   $('#park').textContent = info.park_name;
-  call('GET', '/api/public/info').then((i) => { info = i; LS.set('lp_info', i); $('#park').textContent = i.park_name; document.title = i.park_name; if (current && current.view) show(current.view, true); }).catch(() => {});
+  call('GET', '/api/public/info').then((i) => { info = i; LS.set('lp_info', i); $('#modeSeg').classList.toggle('hidden', !i.virtual_signup); $('#park').textContent = i.park_name; document.title = i.park_name; if (current && current.view) show(current.view, true); }).catch(() => {});
   const list = cards();
   const a = LS.get('lp_active', null);
   if (list.length) openCard(list.some((c) => c.barcode === a) ? a : list[0].barcode); else showWelcome();

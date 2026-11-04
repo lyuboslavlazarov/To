@@ -261,8 +261,12 @@ test('клиентско приложение: виртуален потреби
     assert.equal((await pub('GET', '/app')).status, 200);
     assert.equal((await pub('GET', '/manifest.webmanifest')).status, 200);
 
-    // регистрация в приложението -> виртуална карта
-    let r = await pub('POST', '/api/public/register', { name: 'Нина Петкова', phone: '0888 123 456', age: 9 });
+    // регистрация в приложението е изключена по подразбиране (картите се дават на касата)
+    let r = await pub('POST', '/api/public/register', { name: 'Нина Петкова', phone: '0888 123 456', age: 9, consent: true });
+    assert.equal(r.status, 403);
+    process.env.VIRTUAL_SIGNUP = '1';
+    // регистрация в приложението -> виртуална карта (по желание)
+    r = await pub('POST', '/api/public/register', { name: 'Нина Петкова', phone: '0888 123 456', age: 9 });
     assert.equal(r.status, 400, 'без съгласие');
     r = await pub('POST', '/api/public/register', { name: 'Нина Петкова', phone: '0888 123 456', age: 9, consent: true });
     assert.equal(r.status, 200);
@@ -309,10 +313,14 @@ test('клиентско приложение: виртуален потреби
     r = await pub('POST', '/api/public/login', { barcode: 'LP0410' });
     assert.equal(r.status, 200);
     const t2 = r.data.token;
-    // клиентът сам изпраща данните си -> картата се защитава с телефона
+    // данните се въвеждат от служителя на входа – клиентът не може да ги променя
     r = await pub('PUT', '/api/public/me', { name: 'Тодор', phone: '0899 000 777', age: 10 }, t2);
+    assert.equal(r.status, 403);
+    await call('PUT', '/api/cards/LP0410', { name: 'Тодор', phone: '0899 000 777', age: 10 });
+    r = await pub('GET', '/api/public/me', null, t2);
     assert.equal(r.data.name, 'Тодор');
-    assert.equal((await call('GET', '/api/cards/LP0410')).data.phone, '0899 000 777');
+    assert.equal(r.data.phone_masked, '••• 0777');
+    // след като служителят запише телефон, картата се добавя в нов телефон само с последните 4 цифри
     r = await pub('POST', '/api/public/login', { barcode: 'LP0410' });
     assert.equal(r.data.need_phone, true);
 
