@@ -1,0 +1,30 @@
+<!doctype html>
+<html lang="bg">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Лунапарк</title>
+<link rel="stylesheet" href="/style.css">
+</head>
+<body>
+<header class="top">
+  <span class="home">🎡</span>
+  <h1 id="park">Лунапарк</h1>
+  <span class="clock"></span>
+</header>
+<main>
+  <p class="muted">Изберете екран за това устройство. Всички устройства трябва да са в една мрежа със сървъра.</p>
+  <div class="tiles">
+    <a class="tile" href="/register.html"><div class="e">🎟️</div><h3>Пост за вход</h3><div class="muted">Въвеждане на информация за играещия и регистриране на платен вход</div></a>
+    <a class="tile" href="/game.html"><div class="e">🎯</div><h3>Монитор на игра</h3><div class="muted">Сканиране на карта и добавяне на точки за конкретна игра</div></a>
+    <a class="tile" href="/food.html"><div class="e">🍔</div><h3>Зона за хранене</h3><div class="muted">POS терминал – продукти срещу точки от картата</div></a>
+    <a class="tile" href="/check.html"><div class="e">🔍</div><h3>Проверка на точки</h3><div class="muted">Монитор за посетителите – баланс и последни игри</div></a>
+    <a class="tile" href="/admin.html"><div class="e">📊</div><h3>Администрация</h3><div class="muted">Статистика, карти, игри, продукти, настройки</div></a>
+  </div>
+</main>
+<script src="/common.js"></script>
+<script>
+api('GET', '/api/settings').then((s) => { $('#park').textContent = s.park_name; document.title = s.park_name; }).catch(() => {});
+</script>
+</body>
+</html>

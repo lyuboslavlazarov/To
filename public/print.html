@@ -1,0 +1,57 @@
+<!doctype html>
+<html lang="bg">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Печат на баркодове</title>
+<style>
+  body { font-family: system-ui, sans-serif; margin: 0; background: #eee; color: #111; }
+  .bar { padding: 12px 16px; background: #fff; border-bottom: 1px solid #ccc; display: flex; gap: 12px; align-items: center; flex-wrap: wrap; }
+  .sheet { display: grid; grid-template-columns: repeat(auto-fill, 63mm); gap: 4mm; padding: 10mm; justify-content: center; }
+  .label {
+    width: 63mm; height: 38mm; background: #fff; border: 1px dashed #bbb; border-radius: 3mm;
+    display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 1mm;
+    break-inside: avoid; page-break-inside: avoid;
+  }
+  .label .park { font-size: 9pt; font-weight: 700; }
+  .label svg { width: 55mm; height: 18mm; }
+  .label .code { font: 700 12pt/1 monospace; letter-spacing: 1px; }
+  @media print {
+    body { background: #fff; }
+    .bar { display: none; }
+    .sheet { padding: 0; gap: 2mm; }
+    .label { border-color: #ddd; }
+    @page { margin: 8mm; }
+  }
+</style>
+</head>
+<body>
+<div class="bar">
+  <b>🖨 Печат на баркодове</b>
+  <span id="info"></span>
+  <button onclick="window.print()">Печат</button>
+  <a href="/admin.html">← Администрация</a>
+</div>
+<div class="sheet" id="sheet"></div>
+
+<script src="/common.js"></script>
+<script src="/code128.js"></script>
+<script>
+(async () => {
+  const q = new URLSearchParams(location.search);
+  let codes = [];
+  if (q.get('count')) {
+    const prefix = (q.get('prefix') || '').toUpperCase(), d = Number(q.get('digits')) || 4, s = Number(q.get('start')) || 0, n = Math.min(Number(q.get('count')) || 0, 10000);
+    for (let i = 0; i < n; i++) codes.push(prefix + String(s + i).padStart(d, '0'));
+  } else {
+    const rows = await api('GET', '/api/cards?limit=5000&q=' + encodeURIComponent(q.get('q') || ''));
+    codes = rows.map((r) => r.barcode);
+  }
+  let park = 'Лунапарк';
+  try { park = (await api('GET', '/api/settings')).park_name; } catch { /* ignore */ }
+  $('#info').textContent = `${codes.length} етикета`;
+  $('#sheet').innerHTML = codes.map((c) => `<div class="label"><div class="park">${esc(park)}</div>${code128Svg(c)}<div class="code">${esc(c)}</div></div>`).join('');
+})();
+</script>
+</body>
+</html>

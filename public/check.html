@@ -1,0 +1,71 @@
+<!doctype html>
+<html lang="bg">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Проверка на точки</title>
+<link rel="stylesheet" href="/style.css">
+<style>
+  .scan.mini { position: fixed; bottom: 16px; right: 16px; width: 260px; opacity: .5; }
+  .mini-list { display: grid; grid-template-columns: 1fr 1fr; gap: 20px; width: min(1000px, 100%); text-align: left; }
+  @media (max-width: 800px) { .mini-list { grid-template-columns: 1fr; } }
+</style>
+</head>
+<body>
+<header class="top">
+  <a class="home" href="/">🎡</a>
+  <h1 id="park">Проверка на точки</h1>
+  <span class="clock"></span>
+</header>
+<div class="scan mini"><span class="icon">▥</span><input id="scan" placeholder="Баркод…" autocomplete="off"></div>
+
+<div class="kiosk" id="view"></div>
+
+<script src="/common.js"></script>
+<script>
+let timer;
+
+function idle() {
+  $('#view').innerHTML = `
+    <div class="huge pulse">▥</div>
+    <div class="name">Сканирайте картата си</div>
+    <div class="sub">и вижте колко точки имате 🎉</div>`;
+}
+
+async function onScan(code) {
+  clearTimeout(timer);
+  try {
+    const h = await api('GET', `/api/cards/${encodeURIComponent(code)}/history`);
+    const c = h.card;
+    beep(true);
+    const t = todayStr();
+    const playsToday = h.plays.filter((p) => !p.voided && p.ts.startsWith(t));
+    $('#view').innerHTML = `
+      <div class="name">${c.name ? 'Здравей, ' + esc(c.name) + '!' : 'Карта ' + esc(c.barcode)}</div>
+      <div class="sub">Твоите точки</div>
+      <div class="pts">${Number(c.balance).toLocaleString('bg-BG')}</div>
+      <div class="sub">Днес: ${playsToday.length} игри · Общо: ${c.plays} игри · ${c.visits} посещения</div>
+      ${c.blocked ? '<div class="badge bad">КАРТАТА Е БЛОКИРАНА</div>' : ''}
+      <div class="mini-list">
+        <div class="panel">
+          <h3>🎯 Последни игри</h3>
+          <table><tbody>${h.plays.filter((p) => !p.voided).slice(0, 6).map((p) => `<tr><td>${fmtTs(p.ts)}</td><td>${esc(p.game_name)}</td><td class="right ok">+${p.points}</td></tr>`).join('') || '<tr><td class="muted">Още няма игри</td></tr>'}</tbody></table>
+        </div>
+        <div class="panel">
+          <h3>🍔 Последни покупки</h3>
+          <table><tbody>${h.purchases.filter((p) => !p.voided).slice(0, 6).map((p) => `<tr><td>${fmtTs(p.ts)}</td><td>${p.items.map((i) => `${i.qty}× ${esc(i.name)}`).join(', ')}</td><td class="right bad">−${p.total}</td></tr>`).join('') || '<tr><td class="muted">Още няма покупки</td></tr>'}</tbody></table>
+        </div>
+      </div>`;
+  } catch (e) {
+    beep(false);
+    $('#view').innerHTML = `<div class="huge bad">✖</div><div class="name">${esc(e.message)}</div><div class="sub">Обърнете се към служител</div>`;
+  }
+  timer = setTimeout(idle, 15000);
+}
+
+api('GET', '/api/settings').then((s) => { $('#park').textContent = s.park_name + ' – Проверка на точки'; }).catch(() => {});
+idle();
+bindScanner($('#scan'), onScan);
+</script>
+</body>
+</html>

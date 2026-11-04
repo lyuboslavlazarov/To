@@ -1,0 +1,172 @@
+<!doctype html>
+<html lang="bg">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Пост за вход</title>
+<link rel="stylesheet" href="/style.css">
+</head>
+<body>
+<header class="top">
+  <a class="home" href="/">🎡</a>
+  <h1>🎟️ Пост за вход</h1>
+  <span class="clock"></span>
+</header>
+<main class="layout-side">
+  <section>
+    <div class="scan"><span class="icon">▥</span><input id="scan" placeholder="Сканирайте баркода на картата…" autocomplete="off"></div>
+
+    <div id="empty" class="panel center" style="margin-top:20px; padding:50px">
+      <div class="huge pulse">▥</div>
+      <p class="big">Сканирайте карта</p>
+      <p class="muted">Въведете данните на играещия и регистрирайте плащането за вход.</p>
+    </div>
+
+    <form id="form" class="panel hidden" style="margin-top:20px" autocomplete="off">
+      <div class="row">
+        <h2 class="grow" style="margin:0">Карта <span id="code"></span></h2>
+        <span id="statusBadge"></span>
+      </div>
+      <div class="stats" style="margin-top:14px">
+        <div class="stat"><div class="v" id="sVisits">0</div><div class="l">Платени входове</div></div>
+        <div class="stat"><div class="v" id="sPaid">0</div><div class="l">Общо платено (статистика)</div></div>
+        <div class="stat"><div class="v" id="sPlays">0</div><div class="l">Изиграни игри</div></div>
+        <div class="stat"><div class="v" id="sBalance">0</div><div class="l">Баланс точки</div></div>
+      </div>
+      <p class="muted small" id="lastVisit"></p>
+
+      <div class="grid2">
+        <div>
+          <label for="name">Име и фамилия</label>
+          <input id="name" maxlength="200">
+        </div>
+        <div>
+          <label for="phone">Телефон</label>
+          <input id="phone" maxlength="40" inputmode="tel">
+        </div>
+        <div>
+          <label for="age">Възраст</label>
+          <input id="age" type="number" min="0" max="120">
+        </div>
+        <div>
+          <label for="note">Бележка</label>
+          <input id="note" maxlength="500" placeholder="напр. родител, група, училище…">
+        </div>
+      </div>
+
+      <div class="row" style="margin-top:20px">
+        <div style="width:160px">
+          <label for="fee">Цена на вход</label>
+          <input id="fee" type="number" min="0" step="0.01">
+        </div>
+        <div class="grow"></div>
+        <button type="button" class="ghost xl" id="saveOnly">💾 Само запази</button>
+        <button type="button" class="primary xl" id="saveEntry">✅ Запази и регистрирай вход</button>
+      </div>
+      <p class="muted small">Сумата за вход се записва само за статистика – не се въвежда в оборот и не се превръща в точки<span id="entryPtsInfo"></span>.</p>
+    </form>
+  </section>
+
+  <aside class="panel">
+    <h3>Последни входове</h3>
+    <div class="scroll"><table><tbody id="recent"></tbody></table></div>
+  </aside>
+</main>
+
+<script src="/common.js"></script>
+<script>
+let settings = {};
+let current = null;
+const STATION = station('Вход');
+
+async function loadSettings() {
+  settings = await api('GET', '/api/settings');
+  $('#fee').value = settings.entry_fee;
+  $('#saveEntry').textContent = `✅ Запази и регистрирай вход`;
+  $('#entryPtsInfo').textContent = Number(settings.entry_points) > 0 ? ` (при вход картата получава ${settings.entry_points} начални точки)` : '';
+}
+
+function show(card, code) {
+  current = code;
+  $('#empty').classList.add('hidden');
+  $('#form').classList.remove('hidden');
+  $('#code').textContent = code;
+  const c = card || {};
+  $('#name').value = c.name || '';
+  $('#phone').value = c.phone || '';
+  $('#age').value = c.age ?? '';
+  $('#note').value = c.note || '';
+  $('#fee').value = settings.entry_fee;
+  $('#sVisits').textContent = c.visits || 0;
+  $('#sPaid').textContent = money(c.entry_paid, settings.currency);
+  $('#sPlays').textContent = c.plays || 0;
+  $('#sBalance').textContent = pts(c.balance);
+  $('#lastVisit').textContent = c.last_visit ? `Последен вход: ${fmtTs(c.last_visit)} (${weekday(c.last_visit)})` : 'Няма предишни входове.';
+  let b = '';
+  if (!card) b = '<span class="badge warn">НОВА КАРТА</span>';
+  else if (c.blocked) b = '<span class="badge bad">БЛОКИРАНА</span>';
+  else if (c.entered_today) b = '<span class="badge ok">ВЕЧЕ Е ВЛЯЗЪЛ ДНЕС</span>';
+  $('#statusBadge').innerHTML = b;
+  $('#name').focus();
+}
+
+async function onScan(code) {
+  try {
+    const card = await api('GET', '/api/cards/' + encodeURIComponent(code));
+    beep(true);
+    show(card, code);
+  } catch (e) {
+    if (e.status === 404) { beep(true); show(null, code); toast('Нова карта – въведете данните', 'info'); }
+    else { beep(false); toast(e.message, 'bad'); }
+  }
+}
+
+async function save(withEntry) {
+  if (!current) return;
+  const data = { name: $('#name').value, phone: $('#phone').value, age: $('#age').value, note: $('#note').value };
+  try {
+    let card = await api('PUT', '/api/cards/' + encodeURIComponent(current), data);
+    if (withEntry) {
+      if (card.blocked) throw new Error('Картата е блокирана');
+      if (card.entered_today && !confirm(`${card.name || current} вече има регистриран вход днес. Регистрирай още един?`)) return;
+      const r = await api('POST', '/api/entry', { barcode: current, amount: $('#fee').value, station: STATION });
+      card = r.card;
+      toast(`Вход #${card.visits} за ${card.name || current} ✔`, 'ok');
+    } else {
+      toast('Данните са запазени', 'ok');
+    }
+    beep(true);
+    reset();
+    loadRecent();
+  } catch (e) { beep(false); toast(e.message, 'bad', 4000); }
+}
+
+function reset() {
+  current = null;
+  $('#form').classList.add('hidden');
+  $('#empty').classList.remove('hidden');
+  $('#scan').focus();
+}
+
+async function loadRecent() {
+  try {
+    const rows = await api('GET', '/api/recent?type=visits&limit=30');
+    $('#recent').innerHTML = rows.map((r) => `<tr class="${r.voided ? 'voided' : ''}">
+      <td>${fmtTime(r.ts)}<div class="muted small">${fmtDate(r.ts)}</div></td>
+      <td><b>${esc(r.barcode)}</b><div class="small">${esc(r.name || '—')}</div></td>
+      <td class="right">${money(r.amount, settings.currency)}</td></tr>`).join('') || '<tr><td class="muted">Няма входове</td></tr>';
+  } catch { /* ignore */ }
+}
+
+// Enter в полетата не изпраща формата (скенерът натиска Enter автоматично)
+$('#form').addEventListener('submit', (e) => e.preventDefault());
+$('#saveEntry').addEventListener('click', () => save(true));
+$('#saveOnly').addEventListener('click', () => save(false));
+document.addEventListener('keydown', (e) => { if (e.key === 'Escape') reset(); });
+
+loadSettings().then(loadRecent);
+setInterval(loadRecent, 10000);
+bindScanner($('#scan'), onScan);
+</script>
+</body>
+</html>

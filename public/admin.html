@@ -1,0 +1,364 @@
+<!doctype html>
+<html lang="bg">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Администрация</title>
+<link rel="stylesheet" href="/style.css">
+</head>
+<body>
+<header class="top">
+  <a class="home" href="/">🎡</a>
+  <h1>📊 Администрация</h1>
+  <span class="clock"></span>
+</header>
+<main>
+  <div class="tabs">
+    <button data-tab="stats" class="active">Статистика</button>
+    <button data-tab="cards">Карти и посетители</button>
+    <button data-tab="games">Игри</button>
+    <button data-tab="products">Продукти</button>
+    <button data-tab="settings">Настройки</button>
+  </div>
+
+  <!-- СТАТИСТИКА -->
+  <section id="tab-stats">
+    <div class="row panel">
+      <label style="margin:0">От</label><input type="date" id="from" style="width:auto">
+      <label style="margin:0">До</label><input type="date" id="to" style="width:auto">
+      <button id="btnToday" class="ghost">Днес</button>
+      <button id="btnWeek" class="ghost">7 дни</button>
+      <button id="btnAll" class="ghost">Всичко</button>
+      <div class="grow"></div>
+      <button id="expActivity">⬇ CSV активност</button>
+      <button id="expCards">⬇ CSV карти</button>
+    </div>
+    <div class="stats" id="totals" style="margin:16px 0"></div>
+    <div class="grid2">
+      <div class="panel"><h3>🎯 Игри</h3><table><thead><tr><th>Игра</th><th>Изигравания</th><th>Играчи</th><th>Точки</th><th></th></tr></thead><tbody id="tGames"></tbody></table></div>
+      <div class="panel"><h3>🍔 Продукти</h3><table><thead><tr><th>Продукт</th><th>Брой</th><th>Точки</th><th></th></tr></thead><tbody id="tProducts"></tbody></table></div>
+      <div class="panel"><h3>🕐 Игри по час</h3><table><tbody id="tHours"></tbody></table></div>
+      <div class="panel"><h3>📅 Входове по дни</h3><table><thead><tr><th>Ден</th><th>Входове</th><th>Сума (статистика)</th></tr></thead><tbody id="tDays"></tbody></table></div>
+      <div class="panel" style="grid-column:1/-1"><h3>🏆 Най-активни играчи</h3><table><thead><tr><th>Карта</th><th>Име</th><th>Игри</th><th>Точки</th></tr></thead><tbody id="tTop"></tbody></table></div>
+    </div>
+  </section>
+
+  <!-- КАРТИ -->
+  <section id="tab-cards" class="hidden">
+    <div class="row panel">
+      <div class="scan grow" style="padding:6px 12px"><span class="icon">🔎</span><input id="cardSearch" placeholder="Търсене по баркод, име или телефон (или сканирайте)…"></div>
+      <a class="btn" id="printLink" href="/print.html" target="_blank">🖨 Печат баркодове</a>
+    </div>
+    <div class="panel" style="margin-top:16px">
+      <div class="scroll" style="max-height:70vh">
+        <table><thead><tr><th>Баркод</th><th>Име</th><th>Телефон</th><th>Входове</th><th>Игри</th><th>Покупки</th><th>Баланс</th><th>Последен вход</th></tr></thead>
+        <tbody id="tCards"></tbody></table>
+      </div>
+      <p class="muted small" id="cardsCount"></p>
+    </div>
+  </section>
+
+  <!-- ИГРИ -->
+  <section id="tab-games" class="hidden">
+    <div class="panel">
+      <h3>Нова игра</h3>
+      <div class="row">
+        <input id="gName" placeholder="Име на играта" class="grow" style="width:auto">
+        <input id="gPoints" type="number" min="0" value="10" style="width:140px" title="точки по подразбиране">
+        <button class="primary" id="gAdd">+ Добави</button>
+      </div>
+    </div>
+    <div class="panel" style="margin-top:16px">
+      <table><thead><tr><th>Име</th><th>Точки по подразбиране</th><th>Активна</th><th>Монитор</th><th></th></tr></thead><tbody id="tGameList"></tbody></table>
+    </div>
+  </section>
+
+  <!-- ПРОДУКТИ -->
+  <section id="tab-products" class="hidden">
+    <div class="panel">
+      <h3>Нов продукт</h3>
+      <div class="row">
+        <input id="pName" placeholder="Име (напр. Хот-дог)" class="grow" style="width:auto">
+        <input id="pCat" placeholder="Категория (напр. Храна)" style="width:200px">
+        <input id="pPoints" type="number" min="0" placeholder="точки" style="width:120px">
+        <button class="primary" id="pAdd">+ Добави</button>
+      </div>
+    </div>
+    <div class="panel" style="margin-top:16px">
+      <table><thead><tr><th>Име</th><th>Категория</th><th>Точки</th><th>Подредба</th><th>Активен</th><th></th></tr></thead><tbody id="tProdList"></tbody></table>
+    </div>
+  </section>
+
+  <!-- НАСТРОЙКИ -->
+  <section id="tab-settings" class="hidden">
+    <div class="grid2">
+      <div class="panel">
+        <h3>Общи</h3>
+        <label>Име на парка</label><input id="sName">
+        <label>Цена на вход (само за статистика)</label><input id="sFee" type="number" min="0" step="0.01">
+        <label>Валута</label><input id="sCur">
+        <label>Начални точки при вход (0 = без)</label><input id="sPts" type="number" min="0">
+        <div style="margin-top:14px"><button class="primary" id="sSave">Запази</button></div>
+      </div>
+      <div class="panel">
+        <h3>Генериране на карти</h3>
+        <p class="muted small">Създава карти с последователни баркодове (напр. LP0001 … LP0600). Съществуващите карти не се променят. Ако вече имате готови баркодове, не е нужно – картата се създава автоматично при първо сканиране на поста за вход.</p>
+        <div class="grid2">
+          <div><label>Префикс</label><input id="genPrefix" value="LP"></div>
+          <div><label>Брой цифри</label><input id="genDigits" type="number" value="4" min="1" max="10"></div>
+          <div><label>Начален номер</label><input id="genStart" type="number" value="1" min="0"></div>
+          <div><label>Брой карти</label><input id="genCount" type="number" value="600" min="1" max="10000"></div>
+        </div>
+        <p class="muted small" id="genPreview"></p>
+        <div class="row"><button class="primary" id="genBtn">Генерирай</button><button class="ghost" id="genPrint">🖨 Печат на тези баркодове</button></div>
+      </div>
+    </div>
+  </section>
+</main>
+
+<script src="/common.js"></script>
+<script>
+let settings = {};
+const pinQ = () => (getPin() ? '&pin=' + encodeURIComponent(getPin()) : '');
+
+// ---------- табове ----------
+function openTab(name) {
+  $$('.tabs button').forEach((b) => b.classList.toggle('active', b.dataset.tab === name));
+  $$('main > section').forEach((s) => s.classList.toggle('hidden', s.id !== 'tab-' + name));
+  ({ stats: loadStats, cards: loadCards, games: loadGames, products: loadProducts, settings: loadSettingsTab })[name]();
+  try { localStorage.setItem('admin_tab', name); } catch { /* ignore */ }
+}
+$$('.tabs button').forEach((b) => b.addEventListener('click', () => openTab(b.dataset.tab)));
+
+// ---------- статистика ----------
+function setRange(from, to) { $('#from').value = from; $('#to').value = to; loadStats(); }
+function daysAgo(n) { const d = new Date(); d.setDate(d.getDate() - n); const p = (x) => String(x).padStart(2, '0'); return `${d.getFullYear()}-${p(d.getMonth() + 1)}-${p(d.getDate())}`; }
+$('#btnToday').addEventListener('click', () => setRange(todayStr(), todayStr()));
+$('#btnWeek').addEventListener('click', () => setRange(daysAgo(6), todayStr()));
+$('#btnAll').addEventListener('click', () => setRange('2000-01-01', todayStr()));
+$('#from').addEventListener('change', loadStats);
+$('#to').addEventListener('change', loadStats);
+$('#expActivity').addEventListener('click', () => { location.href = `/api/export/activity?from=${$('#from').value}&to=${$('#to').value}${pinQ()}`; });
+$('#expCards').addEventListener('click', () => { location.href = `/api/export/cards?x=1${pinQ()}`; });
+
+function bars(rows, key) {
+  const max = Math.max(1, ...rows.map((r) => r[key]));
+  return (r) => `<div class="bar" style="width:${Math.round((r[key] / max) * 100)}%"></div>`;
+}
+
+async function loadStats() {
+  if (!$('#from').value) { $('#from').value = todayStr(); $('#to').value = todayStr(); }
+  try {
+    const s = await api('GET', `/api/stats?from=${$('#from').value}&to=${$('#to').value}`);
+    const t = s.totals;
+    const cur = settings.currency || '€';
+    const tiles = [
+      [t.entries, 'Платени входове'],
+      [money(t.entry_amount, cur), 'Сума от входове (статистика)'],
+      [t.unique_visitors, 'Уникални посетители'],
+      [t.plays, 'Изиграни игри'],
+      [t.unique_players, 'Уникални играчи'],
+      [pts(t.points_won), 'Спечелени точки'],
+      [pts(t.points_spent), 'Изхарчени точки'],
+      [t.purchases, 'Поръчки в зоната за хранене'],
+      [t.cards_with_holder + ' / ' + t.cards_total, 'Карти с въведен играч'],
+    ];
+    $('#totals').innerHTML = tiles.map(([v, l]) => `<div class="stat"><div class="v">${v}</div><div class="l">${l}</div></div>`).join('');
+    const bg = bars(s.byGame, 'plays');
+    $('#tGames').innerHTML = s.byGame.map((r) => `<tr><td>${esc(r.game_name)}</td><td>${r.plays}</td><td>${r.players}</td><td>${r.points}</td><td style="width:30%">${bg(r)}</td></tr>`).join('') || '<tr><td class="muted" colspan="5">Няма данни</td></tr>';
+    const bp = bars(s.byProduct, 'qty');
+    $('#tProducts').innerHTML = s.byProduct.map((r) => `<tr><td>${esc(r.name)}</td><td>${r.qty}</td><td>${r.points}</td><td style="width:30%">${bp(r)}</td></tr>`).join('') || '<tr><td class="muted" colspan="4">Няма данни</td></tr>';
+    const bh = bars(s.byHour, 'plays');
+    $('#tHours').innerHTML = s.byHour.map((r) => `<tr><td style="width:80px">${r.hour}:00</td><td style="width:60px">${r.plays}</td><td>${bh(r)}</td></tr>`).join('') || '<tr><td class="muted">Няма данни</td></tr>';
+    $('#tDays').innerHTML = s.byDay.map((r) => `<tr><td>${fmtDate(r.day)} <span class="muted small">${weekday(r.day)}</span></td><td>${r.entries}</td><td>${money(r.amount, cur)}</td></tr>`).join('') || '<tr><td class="muted" colspan="3">Няма данни</td></tr>';
+    $('#tTop').innerHTML = s.topPlayers.map((r) => `<tr class="clickable" data-card="${esc(r.barcode)}" style="cursor:pointer"><td>${esc(r.barcode)}</td><td>${esc(r.name || '—')}</td><td>${r.plays}</td><td>${r.points}</td></tr>`).join('') || '<tr><td class="muted" colspan="4">Няма данни</td></tr>';
+    $$('#tTop [data-card]').forEach((tr) => tr.addEventListener('click', () => openCard(tr.dataset.card)));
+  } catch (e) { toast(e.message, 'bad'); }
+}
+
+// ---------- карти ----------
+let searchTimer;
+$('#cardSearch').addEventListener('input', () => { clearTimeout(searchTimer); searchTimer = setTimeout(loadCards, 250); });
+$('#cardSearch').addEventListener('keydown', (e) => {
+  if (e.key === 'Enter') { const v = e.target.value.trim().toUpperCase(); if (v) openCard(v); }
+});
+
+async function loadCards() {
+  const q = $('#cardSearch').value.trim();
+  $('#printLink').href = '/print.html' + (q ? '?q=' + encodeURIComponent(q) : '');
+  try {
+    const rows = await api('GET', '/api/cards?limit=5000&q=' + encodeURIComponent(q));
+    $('#tCards').innerHTML = rows.map((r) => `<tr data-card="${esc(r.barcode)}" style="cursor:pointer">
+      <td><b>${esc(r.barcode)}</b> ${r.blocked ? '<span class="badge bad">блок.</span>' : ''}</td>
+      <td>${esc(r.name || '—')}</td><td>${esc(r.phone || '')}</td>
+      <td>${r.visits}</td><td>${r.plays}</td><td>${r.purchases}</td><td>${r.balance}</td>
+      <td>${fmtTs(r.last_visit)}</td></tr>`).join('') || '<tr><td colspan="8" class="muted">Няма карти. Генерирайте ги от „Настройки“.</td></tr>';
+    $('#cardsCount').textContent = `${rows.length} карти`;
+    $$('#tCards [data-card]').forEach((tr) => tr.addEventListener('click', () => openCard(tr.dataset.card)));
+  } catch (e) { toast(e.message, 'bad'); }
+}
+
+async function openCard(code) {
+  let h;
+  try { h = await api('GET', `/api/cards/${encodeURIComponent(code)}/history`); }
+  catch (e) { toast(e.message, 'bad'); return; }
+  const c = h.card;
+  const cur = settings.currency || '€';
+  closeModal();
+  const bg = document.createElement('div');
+  bg.className = 'modal-bg';
+  bg.innerHTML = `<div class="modal">
+    <div class="row"><h2 class="grow" style="margin:0">Карта ${esc(c.barcode)} ${c.blocked ? '<span class="badge bad">БЛОКИРАНА</span>' : ''}</h2><button class="ghost" data-close>✕</button></div>
+    <div class="grid2" style="margin-top:12px">
+      <div>
+        <label>Име</label><input id="mName" value="${esc(c.name)}">
+        <div class="grid2"><div><label>Телефон</label><input id="mPhone" value="${esc(c.phone)}"></div><div><label>Възраст</label><input id="mAge" type="number" value="${c.age ?? ''}"></div></div>
+        <label>Бележка</label><input id="mNote" value="${esc(c.note)}">
+        <div class="row" style="margin-top:10px"><button class="primary" id="mSave">Запази данните</button>
+        <button class="${c.blocked ? 'ok' : 'danger'}" id="mBlock">${c.blocked ? 'Отблокирай' : 'Блокирай (изгубена)'}</button></div>
+      </div>
+      <div>
+        <div class="stats">
+          <div class="stat"><div class="v">${c.visits}</div><div class="l">Платени входове</div></div>
+          <div class="stat"><div class="v">${money(c.entry_paid, cur)}</div><div class="l">Платено за вход (статистика)</div></div>
+          <div class="stat"><div class="v">${c.plays}</div><div class="l">Изиграни игри</div></div>
+          <div class="stat"><div class="v">${c.points_won}</div><div class="l">Спечелени точки</div></div>
+          <div class="stat"><div class="v">${c.points_spent}</div><div class="l">Изхарчени точки</div></div>
+          <div class="stat"><div class="v" style="color:var(--accent)">${c.balance}</div><div class="l">Баланс</div></div>
+        </div>
+        <div class="row" style="margin-top:12px">
+          <input id="mAdj" type="number" placeholder="± точки" style="width:110px">
+          <input id="mAdjR" placeholder="причина" class="grow" style="width:auto">
+          <button id="mAdjBtn">Корекция</button>
+        </div>
+      </div>
+    </div>
+
+    <div class="grid2" style="margin-top:18px">
+      <div><h3>Игри по вид</h3><table><thead><tr><th>Игра</th><th>Пъти</th><th>Точки</th><th>Последно</th></tr></thead><tbody>
+        ${h.byGame.map((g) => `<tr><td>${esc(g.game_name)}</td><td>${g.times}</td><td>${g.points}</td><td>${fmtTs(g.last)}</td></tr>`).join('') || '<tr><td class="muted" colspan="4">Няма</td></tr>'}</tbody></table></div>
+      <div><h3>За какво е харчил точки</h3><table><thead><tr><th>Продукт</th><th>Брой</th><th>Точки</th></tr></thead><tbody>
+        ${h.byProduct.map((p) => `<tr><td>${esc(p.name)}</td><td>${p.qty}</td><td>${p.points}</td></tr>`).join('') || '<tr><td class="muted" colspan="3">Няма</td></tr>'}</tbody></table></div>
+    </div>
+
+    <h3 style="margin-top:18px">🎯 Всички игри (ден, час)</h3>
+    <div class="scroll" style="max-height:300px"><table><thead><tr><th>Дата</th><th>Ден</th><th>Час</th><th>Игра</th><th>Точки</th><th></th></tr></thead><tbody>
+      ${h.plays.map((p) => `<tr class="${p.voided ? 'voided' : ''}"><td>${fmtDate(p.ts)}</td><td>${weekday(p.ts)}</td><td>${fmtTime(p.ts)}</td><td>${esc(p.game_name)}</td><td>+${p.points}</td>
+        <td>${p.voided ? '' : `<button class="ghost sm" data-void-play="${p.id}">Анулирай</button>`}</td></tr>`).join('') || '<tr><td class="muted" colspan="6">Няма</td></tr>'}</tbody></table></div>
+
+    <h3 style="margin-top:18px">🍔 Покупки</h3>
+    <div class="scroll" style="max-height:300px"><table><thead><tr><th>Дата и час</th><th>Продукти</th><th>Точки</th><th>Пост</th><th></th></tr></thead><tbody>
+      ${h.purchases.map((p) => `<tr class="${p.voided ? 'voided' : ''}"><td>${fmtTs(p.ts)} <span class="muted small">${weekday(p.ts)}</span></td><td>${p.items.map((i) => `${i.qty}× ${esc(i.name)} (${i.points})`).join(', ')}</td><td>−${p.total}</td><td>${esc(p.station)}</td>
+        <td>${p.voided ? '' : `<button class="ghost sm" data-void-purchase="${p.id}">Анулирай</button>`}</td></tr>`).join('') || '<tr><td class="muted" colspan="5">Няма</td></tr>'}</tbody></table></div>
+
+    <h3 style="margin-top:18px">🎟️ Платени входове</h3>
+    <div class="scroll" style="max-height:240px"><table><thead><tr><th>Дата и час</th><th>Сума</th><th>Начални точки</th><th>Пост</th><th></th></tr></thead><tbody>
+      ${h.visits.map((v) => `<tr class="${v.voided ? 'voided' : ''}"><td>${fmtTs(v.ts)} <span class="muted small">${weekday(v.ts)}</span></td><td>${money(v.amount, cur)}</td><td>${v.points}</td><td>${esc(v.station)}</td>
+        <td>${v.voided ? '' : `<button class="ghost sm" data-void-visit="${v.id}">Анулирай</button>`}</td></tr>`).join('') || '<tr><td class="muted" colspan="5">Няма</td></tr>'}</tbody></table></div>
+
+    ${h.adjustments.length ? `<h3 style="margin-top:18px">✏️ Корекции</h3><table><tbody>${h.adjustments.map((a) => `<tr><td>${fmtTs(a.ts)}</td><td>${a.points > 0 ? '+' : ''}${a.points}</td><td>${esc(a.reason)}</td></tr>`).join('')}</tbody></table>` : ''}
+  </div>`;
+  document.body.appendChild(bg);
+  bg.addEventListener('click', (e) => { if (e.target === bg || e.target.hasAttribute('data-close')) closeModal(); });
+
+  const act = async (fn, msg) => { try { await fn(); toast(msg, 'ok'); openCard(code); refreshActive(); } catch (e) { toast(e.message, 'bad', 4000); } };
+  $('#mSave', bg).addEventListener('click', () => act(() => api('PUT', `/api/cards/${encodeURIComponent(code)}`, { name: $('#mName').value, phone: $('#mPhone').value, age: $('#mAge').value, note: $('#mNote').value }), 'Запазено'));
+  $('#mBlock', bg).addEventListener('click', () => act(() => api('POST', `/api/cards/${encodeURIComponent(code)}/block`, { blocked: !c.blocked }), c.blocked ? 'Отблокирана' : 'Блокирана'));
+  $('#mAdjBtn', bg).addEventListener('click', () => act(() => api('POST', `/api/cards/${encodeURIComponent(code)}/adjust`, { points: $('#mAdj').value, reason: $('#mAdjR').value }), 'Корекцията е записана'));
+  $$('[data-void-play]', bg).forEach((b) => b.addEventListener('click', () => confirm('Анулиране на играта?') && act(() => api('POST', `/api/plays/${b.dataset.voidPlay}/void`, { admin: true }), 'Анулирано')));
+  $$('[data-void-purchase]', bg).forEach((b) => b.addEventListener('click', () => confirm('Анулиране на покупката? Точките ще се върнат.') && act(() => api('POST', `/api/purchases/${b.dataset.voidPurchase}/void`, {}), 'Анулирано')));
+  $$('[data-void-visit]', bg).forEach((b) => b.addEventListener('click', () => confirm('Анулиране на входа?') && act(() => api('POST', `/api/visits/${b.dataset.voidVisit}/void`, {}), 'Анулирано')));
+}
+function closeModal() { $$('.modal-bg').forEach((m) => m.remove()); }
+document.addEventListener('keydown', (e) => { if (e.key === 'Escape') closeModal(); });
+function refreshActive() { const t = $('.tabs button.active').dataset.tab; if (t === 'cards') loadCards(); if (t === 'stats') loadStats(); }
+
+// ---------- игри ----------
+async function loadGames() {
+  try {
+    const rows = await api('GET', '/api/games?all=1');
+    $('#tGameList').innerHTML = rows.map((g) => `<tr data-id="${g.id}">
+      <td><input data-f="name" value="${esc(g.name)}"></td>
+      <td><input data-f="points" type="number" min="0" value="${g.points}" style="width:120px"></td>
+      <td><input data-f="active" type="checkbox" ${g.active ? 'checked' : ''} style="width:auto"></td>
+      <td><a href="/game.html?game=${g.id}" target="_blank">отвори ↗</a></td>
+      <td><button class="sm" data-save>Запази</button></td></tr>`).join('') || '<tr><td class="muted" colspan="5">Няма игри</td></tr>';
+    $$('#tGameList [data-save]').forEach((b) => b.addEventListener('click', async () => {
+      const tr = b.closest('tr');
+      try {
+        await api('PUT', `/api/games/${tr.dataset.id}`, { name: $('[data-f=name]', tr).value, points: $('[data-f=points]', tr).value, active: $('[data-f=active]', tr).checked });
+        toast('Запазено', 'ok'); loadGames();
+      } catch (e) { toast(e.message, 'bad'); }
+    }));
+  } catch (e) { toast(e.message, 'bad'); }
+}
+$('#gAdd').addEventListener('click', async () => {
+  try { await api('POST', '/api/games', { name: $('#gName').value, points: $('#gPoints').value }); $('#gName').value = ''; toast('Добавена', 'ok'); loadGames(); }
+  catch (e) { toast(e.message, 'bad'); }
+});
+
+// ---------- продукти ----------
+async function loadProducts() {
+  try {
+    const rows = await api('GET', '/api/products?all=1');
+    $('#tProdList').innerHTML = rows.map((p) => `<tr data-id="${p.id}">
+      <td><input data-f="name" value="${esc(p.name)}"></td>
+      <td><input data-f="category" value="${esc(p.category)}"></td>
+      <td><input data-f="points" type="number" min="0" value="${p.points}" style="width:100px"></td>
+      <td><input data-f="sort" type="number" value="${p.sort}" style="width:80px"></td>
+      <td><input data-f="active" type="checkbox" ${p.active ? 'checked' : ''} style="width:auto"></td>
+      <td><button class="sm" data-save>Запази</button></td></tr>`).join('') || '<tr><td class="muted" colspan="6">Няма продукти</td></tr>';
+    $$('#tProdList [data-save]').forEach((b) => b.addEventListener('click', async () => {
+      const tr = b.closest('tr');
+      try {
+        await api('PUT', `/api/products/${tr.dataset.id}`, { name: $('[data-f=name]', tr).value, category: $('[data-f=category]', tr).value, points: $('[data-f=points]', tr).value, sort: $('[data-f=sort]', tr).value || 0, active: $('[data-f=active]', tr).checked });
+        toast('Запазено', 'ok'); loadProducts();
+      } catch (e) { toast(e.message, 'bad'); }
+    }));
+  } catch (e) { toast(e.message, 'bad'); }
+}
+$('#pAdd').addEventListener('click', async () => {
+  try {
+    await api('POST', '/api/products', { name: $('#pName').value, category: $('#pCat').value, points: $('#pPoints').value });
+    $('#pName').value = ''; $('#pPoints').value = ''; toast('Добавен', 'ok'); loadProducts();
+  } catch (e) { toast(e.message, 'bad'); }
+});
+
+// ---------- настройки ----------
+async function loadSettingsTab() {
+  settings = await api('GET', '/api/settings');
+  $('#sName').value = settings.park_name; $('#sFee').value = settings.entry_fee; $('#sCur').value = settings.currency; $('#sPts').value = settings.entry_points;
+  genPreview();
+}
+$('#sSave').addEventListener('click', async () => {
+  try {
+    settings = await api('PUT', '/api/settings', { park_name: $('#sName').value, entry_fee: $('#sFee').value, currency: $('#sCur').value, entry_points: $('#sPts').value });
+    toast('Настройките са запазени', 'ok');
+  } catch (e) { toast(e.message, 'bad'); }
+});
+function genCodes() {
+  const prefix = $('#genPrefix').value.trim().toUpperCase(); const d = Number($('#genDigits').value) || 4;
+  const s = Number($('#genStart').value) || 0; const n = Number($('#genCount').value) || 0;
+  return { prefix, digits: d, start: s, count: n, first: prefix + String(s).padStart(d, '0'), last: prefix + String(s + n - 1).padStart(d, '0') };
+}
+function genPreview() { const g = genCodes(); $('#genPreview').textContent = g.count > 0 ? `Ще бъдат създадени: ${g.first} … ${g.last} (${g.count} бр.)` : ''; }
+['#genPrefix', '#genDigits', '#genStart', '#genCount'].forEach((s) => $(s).addEventListener('input', genPreview));
+$('#genBtn').addEventListener('click', async () => {
+  const g = genCodes();
+  if (!confirm(`Генериране на ${g.count} карти (${g.first} … ${g.last})?`)) return;
+  try { const r = await api('POST', '/api/cards/generate', g); toast(`Създадени: ${r.created}, вече съществуващи: ${r.skipped}`, 'ok', 4000); }
+  catch (e) { toast(e.message, 'bad'); }
+});
+$('#genPrint').addEventListener('click', () => {
+  const g = genCodes();
+  window.open(`/print.html?prefix=${encodeURIComponent(g.prefix)}&digits=${g.digits}&start=${g.start}&count=${g.count}`, '_blank');
+});
+
+// ---------- старт ----------
+api('GET', '/api/settings').then((s) => { settings = s; }).finally(() => {
+  let t = 'stats'; try { t = localStorage.getItem('admin_tab') || 'stats'; } catch { /* ignore */ }
+  openTab(t);
+});
+</script>
+</body>
+</html>

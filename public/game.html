@@ -1,0 +1,163 @@
+<!doctype html>
+<html lang="bg">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Монитор на игра</title>
+<link rel="stylesheet" href="/style.css">
+</head>
+<body>
+<header class="top">
+  <a class="home" href="/">🎡</a>
+  <h1>🎯 <span id="gameTitle">Монитор на игра</span></h1>
+  <button class="ghost sm" id="changeGame">Смени играта</button>
+  <span class="clock"></span>
+</header>
+
+<main id="pick" class="hidden">
+  <h2>Изберете играта за този монитор</h2>
+  <p class="muted">Изборът се запомня на това устройство. Можете да отворите и директно <code>/game.html?game=ID</code>.</p>
+  <div class="tiles" id="gameList"></div>
+</main>
+
+<main id="work" class="layout-side hidden">
+  <section>
+    <div class="panel">
+      <h3>Точки за това изиграване</h3>
+      <div class="points-picker" id="picker"></div>
+      <div class="row" style="margin-top:12px">
+        <label style="margin:0">Друга стойност:</label>
+        <input id="custom" type="number" min="0" style="width:140px" placeholder="точки">
+      </div>
+    </div>
+
+    <div class="scan" style="margin-top:20px"><span class="icon">▥</span><input id="scan" placeholder="Сканирайте картата на играча…" autocomplete="off"></div>
+
+    <div id="result" class="result center" style="margin-top:20px; min-height:260px; display:flex; flex-direction:column; justify-content:center">
+      <div class="huge pulse muted">▥</div>
+      <p class="big muted">Сканирайте карта, за да добавите точки</p>
+    </div>
+  </section>
+
+  <aside class="panel">
+    <h3>Последни играчи</h3>
+    <div class="scroll"><table><tbody id="recent"></tbody></table></div>
+  </aside>
+</main>
+
+<script src="/common.js"></script>
+<script>
+let game = null;
+let selected = null; // избрани точки
+let resetTimer;
+
+function storedGame() {
+  const q = new URLSearchParams(location.search).get('game');
+  if (q) return q;
+  try { return localStorage.getItem('game_id'); } catch { return null; }
+}
+
+async function init() {
+  const games = await api('GET', '/api/games');
+  const id = storedGame();
+  game = games.find((g) => String(g.id) === String(id));
+  if (!game) return showPick(games);
+  try { localStorage.setItem('game_id', game.id); } catch { /* ignore */ }
+  $('#pick').classList.add('hidden');
+  $('#work').classList.remove('hidden');
+  $('#gameTitle').textContent = game.name;
+  document.title = game.name;
+  buildPicker();
+  loadRecent();
+  bindScanner($('#scan'), onScan);
+  setInterval(loadRecent, 15000);
+}
+
+function showPick(games) {
+  $('#work').classList.add('hidden');
+  $('#pick').classList.remove('hidden');
+  $('#gameList').innerHTML = games.map((g) => `<a class="tile" href="?game=${g.id}"><div class="e">🎯</div><h3>${esc(g.name)}</h3><div class="muted">${pts(g.points)} по подразбиране</div></a>`).join('')
+    || '<p class="muted">Няма създадени игри. Добавете игри от <a href="/admin.html">Администрация</a>.</p>';
+}
+
+function buildPicker() {
+  const base = game.points;
+  const vals = [...new Set([0, base, base * 2, base * 3, Math.round(base / 2)].filter((v) => v >= 0))].sort((a, b) => a - b);
+  $('#picker').innerHTML = vals.map((v) => `<button data-v="${v}">${v === base ? '★ ' : ''}${v}</button>`).join('');
+  $$('#picker button').forEach((b) => b.addEventListener('click', () => { $('#custom').value = ''; select(Number(b.dataset.v)); }));
+  $('#custom').addEventListener('input', () => { const v = $('#custom').value; if (v !== '') select(Number(v), true); });
+  $('#custom').addEventListener('keydown', (e) => { if (e.key === 'Enter') { e.preventDefault(); $('#scan').focus(); } });
+  select(base);
+}
+
+function select(v, fromCustom) {
+  selected = v;
+  $$('#picker button').forEach((b) => b.classList.toggle('active', !fromCustom && Number(b.dataset.v) === v));
+}
+
+async function onScan(code) {
+  clearTimeout(resetTimer);
+  const points = selected ?? game.points;
+  try {
+    const r = await api('POST', '/api/plays', { barcode: code, game_id: game.id, points });
+    beep(true);
+    const c = r.card;
+    $('#result').className = 'result center ok';
+    $('#result').innerHTML = `
+      <div class="big">${esc(c.name || 'Без име')} <span class="muted small">${esc(c.barcode)}</span></div>
+      <div class="huge ok">+${r.points}</div>
+      <div class="big">Баланс: <span style="color:var(--accent)">${pts(c.balance)}</span></div>
+      <p class="muted">Игра „${esc(game.name)}“ – ${r.times_this_game}-и път · общо ${c.plays} игри</p>
+      ${r.entered_today ? '' : '<p class="badge warn">⚠ Няма регистриран вход днес</p>'}
+      <div><button class="ghost sm" data-void="${r.play_id}">↩ Анулирай</button></div>`;
+    bindVoid($('#result'));
+    loadRecent();
+  } catch (e) {
+    beep(false);
+    $('#result').className = 'result center bad';
+    $('#result').innerHTML = `<div class="huge bad">✖</div><div class="big">${esc(e.message)}</div><p class="muted">${esc(code)}</p>`;
+  }
+  // след изиграване връщаме точките по подразбиране
+  $('#custom').value = '';
+  select(game.points);
+  resetTimer = setTimeout(() => {
+    $('#result').className = 'result center';
+    $('#result').innerHTML = '<div class="huge pulse muted">▥</div><p class="big muted">Сканирайте карта, за да добавите точки</p>';
+  }, 12000);
+}
+
+function bindVoid(el) {
+  $$('[data-void]', el).forEach((b) => b.addEventListener('click', async () => {
+    if (!confirm('Анулиране на това изиграване и точките?')) return;
+    try {
+      const r = await api('POST', `/api/plays/${b.dataset.void}/void`, {});
+      toast(`Анулирано. Нов баланс: ${pts(r.card.balance)}`, 'ok');
+      b.disabled = true;
+      loadRecent();
+    } catch (e) { toast(e.message, 'bad', 4000); }
+  }));
+}
+
+async function loadRecent() {
+  try {
+    const rows = await api('GET', `/api/recent?game_id=${game.id}&limit=25`);
+    $('#recent').innerHTML = rows.map((r) => `<tr class="${r.voided ? 'voided' : ''}">
+      <td>${fmtTime(r.ts)}</td>
+      <td><b>${esc(r.name || '—')}</b><div class="muted small">${esc(r.barcode)}</div></td>
+      <td class="right">+${r.points}</td>
+      <td>${!r.voided && Date.now() - new Date(r.ts.replace(' ', 'T')) < 5 * 60e3 ? `<button class="ghost sm" data-void="${r.id}" title="Анулирай">↩</button>` : ''}</td></tr>`).join('')
+      || '<tr><td class="muted">Още няма играчи</td></tr>';
+    bindVoid($('#recent'));
+  } catch { /* ignore */ }
+}
+
+$('#changeGame').addEventListener('click', async () => {
+  try { localStorage.removeItem('game_id'); } catch { /* ignore */ }
+  history.replaceState(null, '', location.pathname);
+  location.reload();
+});
+
+init().catch((e) => toast(e.message, 'bad', 5000));
+</script>
+</body>
+</html>

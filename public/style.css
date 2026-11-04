@@ -1,0 +1,191 @@
+:root {
+  --bg: #0f1226;
+  --bg2: #171b38;
+  --card: #1f2448;
+  --line: #2f3566;
+  --text: #f2f3ff;
+  --muted: #9aa0c8;
+  --accent: #ffb703;
+  --accent2: #8ecae6;
+  --ok: #2ecc71;
+  --bad: #ff5d73;
+  --warn: #ffb703;
+  --radius: 14px;
+}
+* { box-sizing: border-box; }
+html, body { margin: 0; padding: 0; }
+body {
+  background: var(--bg);
+  color: var(--text);
+  font: 16px/1.4 system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+  min-height: 100vh;
+}
+a { color: var(--accent2); }
+h1, h2, h3 { margin: 0 0 .5em; line-height: 1.2; }
+.muted { color: var(--muted); }
+.small { font-size: .85em; }
+.big { font-size: 1.6em; font-weight: 700; }
+.huge { font-size: clamp(48px, 10vw, 120px); font-weight: 800; line-height: 1; }
+.ok { color: var(--ok); }
+.bad { color: var(--bad); }
+.warn { color: var(--warn); }
+.right { text-align: right; }
+.center { text-align: center; }
+.row { display: flex; gap: 12px; align-items: center; flex-wrap: wrap; }
+.grow { flex: 1; }
+.hidden { display: none !important; }
+
+header.top {
+  display: flex; align-items: center; gap: 16px;
+  padding: 12px 20px;
+  background: linear-gradient(90deg, #22285a, #3a1f5d);
+  border-bottom: 1px solid var(--line);
+}
+header.top h1 { margin: 0; font-size: 1.35em; }
+header.top .home { text-decoration: none; font-size: 1.6em; }
+header.top .clock { margin-left: auto; color: var(--muted); font-variant-numeric: tabular-nums; }
+
+main { padding: 20px; max-width: 1400px; margin: 0 auto; }
+
+.panel {
+  background: var(--card);
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  padding: 18px;
+}
+.grid2 { display: grid; grid-template-columns: 1fr 1fr; gap: 20px; }
+.grid3 { display: grid; grid-template-columns: repeat(3, 1fr); gap: 20px; }
+.layout-side { display: grid; grid-template-columns: minmax(0, 2fr) minmax(320px, 1fr); gap: 20px; }
+@media (max-width: 900px) {
+  .grid2, .grid3, .layout-side { grid-template-columns: 1fr; }
+}
+
+input, select, textarea, button { font: inherit; }
+input, select, textarea {
+  width: 100%;
+  padding: 10px 12px;
+  background: var(--bg2);
+  color: var(--text);
+  border: 1px solid var(--line);
+  border-radius: 10px;
+}
+input:focus, select:focus, textarea:focus { outline: 2px solid var(--accent2); border-color: transparent; }
+label { display: block; margin: 10px 0 4px; color: var(--muted); font-size: .9em; }
+
+button, .btn {
+  display: inline-flex; align-items: center; justify-content: center; gap: 6px;
+  padding: 10px 18px;
+  border: 0; border-radius: 10px;
+  background: #3a4183; color: var(--text);
+  cursor: pointer; text-decoration: none;
+  font-weight: 600;
+  transition: transform .05s, filter .15s;
+}
+button:hover, .btn:hover { filter: brightness(1.15); }
+button:active, .btn:active { transform: scale(.97); }
+button:disabled { opacity: .45; cursor: not-allowed; filter: none; }
+button.primary { background: var(--accent); color: #222; }
+button.ok { background: var(--ok); color: #082; color: #04210f; }
+button.danger { background: var(--bad); color: #fff; }
+button.ghost { background: transparent; border: 1px solid var(--line); }
+button.xl { font-size: 1.3em; padding: 16px 26px; }
+button.sm { padding: 5px 10px; font-size: .85em; }
+
+.scan {
+  display: flex; align-items: center; gap: 12px;
+  background: var(--bg2);
+  border: 2px dashed var(--accent2);
+  border-radius: var(--radius);
+  padding: 12px 16px;
+}
+.scan .icon { font-size: 2em; }
+.scan input { font-size: 1.4em; letter-spacing: 2px; background: transparent; border: 0; padding: 6px 0; }
+.scan input:focus { outline: none; }
+.scan.focused { border-style: solid; box-shadow: 0 0 0 4px rgba(142, 202, 230, .15); }
+
+table { width: 100%; border-collapse: collapse; }
+th, td { padding: 8px 10px; border-bottom: 1px solid var(--line); text-align: left; vertical-align: top; }
+th { color: var(--muted); font-weight: 600; font-size: .85em; text-transform: uppercase; letter-spacing: .03em; }
+tr.voided td { text-decoration: line-through; opacity: .5; }
+tbody tr:hover { background: rgba(255,255,255,.03); }
+.scroll { max-height: 60vh; overflow: auto; }
+
+.stat { background: var(--bg2); border-radius: 12px; padding: 14px; }
+.stat .v { font-size: 1.8em; font-weight: 800; }
+.stat .l { color: var(--muted); font-size: .85em; }
+.stats { display: grid; grid-template-columns: repeat(auto-fill, minmax(170px, 1fr)); gap: 12px; }
+
+.badge { display: inline-block; padding: 2px 10px; border-radius: 999px; font-size: .8em; font-weight: 700; background: #3a4183; }
+.badge.ok { background: rgba(46,204,113,.2); color: var(--ok); }
+.badge.bad { background: rgba(255,93,115,.2); color: var(--bad); }
+.badge.warn { background: rgba(255,183,3,.2); color: var(--warn); }
+
+.tabs { display: flex; gap: 6px; flex-wrap: wrap; margin-bottom: 16px; }
+.tabs button { background: var(--bg2); border: 1px solid var(--line); }
+.tabs button.active { background: var(--accent); color: #222; }
+
+/* Toast */
+#toast {
+  position: fixed; left: 50%; bottom: 30px; transform: translateX(-50%);
+  min-width: 280px; max-width: 90vw;
+  padding: 16px 24px; border-radius: 14px;
+  font-size: 1.15em; font-weight: 700; text-align: center;
+  box-shadow: 0 10px 40px rgba(0,0,0,.5);
+  z-index: 1000; opacity: 0; pointer-events: none; transition: opacity .2s;
+}
+#toast.show { opacity: 1; }
+#toast.ok { background: var(--ok); color: #04210f; }
+#toast.bad { background: var(--bad); color: #fff; }
+#toast.info { background: var(--accent2); color: #0a2230; }
+
+/* Начален екран */
+.tiles { display: grid; grid-template-columns: repeat(auto-fill, minmax(240px, 1fr)); gap: 18px; }
+.tile {
+  display: block; text-decoration: none; color: var(--text);
+  background: var(--card); border: 1px solid var(--line); border-radius: 18px;
+  padding: 24px; transition: transform .1s, border-color .1s;
+}
+.tile:hover { transform: translateY(-3px); border-color: var(--accent); }
+.tile .e { font-size: 2.6em; }
+.tile h3 { margin: 10px 0 4px; }
+
+/* Резултат от сканиране */
+.result { border-radius: var(--radius); padding: 20px; background: var(--bg2); border: 2px solid var(--line); }
+.result.ok { border-color: var(--ok); }
+.result.bad { border-color: var(--bad); }
+
+/* POS */
+.cat-title { margin: 18px 0 8px; color: var(--accent2); font-size: 1em; text-transform: uppercase; letter-spacing: .05em; }
+.products { display: grid; grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); gap: 12px; }
+.product {
+  display: flex; flex-direction: column; align-items: flex-start; justify-content: space-between;
+  min-height: 110px; padding: 14px; text-align: left;
+  background: var(--card); border: 1px solid var(--line); border-radius: 14px;
+  font-size: 1.05em;
+}
+.product .pts { color: var(--accent); font-size: 1.3em; font-weight: 800; }
+.product.in-cart { border-color: var(--accent); box-shadow: inset 0 0 0 1px var(--accent); }
+.product .qty-badge { align-self: flex-end; }
+.cart-line { display: flex; align-items: center; gap: 8px; padding: 8px 0; border-bottom: 1px solid var(--line); }
+.cart-line .n { flex: 1; }
+.cart-line .q { min-width: 28px; text-align: center; font-weight: 700; }
+.total { display: flex; justify-content: space-between; font-size: 1.5em; font-weight: 800; margin: 14px 0; }
+
+/* Игра */
+.points-picker { display: flex; flex-wrap: wrap; gap: 10px; }
+.points-picker button { min-width: 80px; font-size: 1.3em; padding: 14px; background: var(--bg2); border: 2px solid var(--line); }
+.points-picker button.active { border-color: var(--accent); background: rgba(255,183,3,.15); color: var(--accent); }
+
+/* Проверка на точки (киоск) */
+.kiosk { min-height: calc(100vh - 70px); display: flex; flex-direction: column; align-items: center; justify-content: center; text-align: center; gap: 20px; padding: 20px; }
+.kiosk .name { font-size: clamp(28px, 5vw, 56px); font-weight: 700; }
+.kiosk .pts { font-size: clamp(80px, 18vw, 220px); font-weight: 900; color: var(--accent); line-height: 1; }
+.kiosk .sub { font-size: 1.4em; color: var(--muted); }
+.pulse { animation: pulse 2s infinite; }
+@keyframes pulse { 50% { opacity: .5; } }
+
+/* Модален прозорец */
+.modal-bg { position: fixed; inset: 0; background: rgba(0,0,0,.6); display: flex; align-items: center; justify-content: center; z-index: 900; padding: 20px; }
+.modal { background: var(--card); border: 1px solid var(--line); border-radius: 16px; padding: 22px; width: min(1000px, 100%); max-height: 90vh; overflow: auto; }
+
+.bar { height: 10px; background: var(--accent); border-radius: 5px; min-width: 2px; }

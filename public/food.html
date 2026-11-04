@@ -1,0 +1,180 @@
+<!doctype html>
+<html lang="bg">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Зона за хранене</title>
+<link rel="stylesheet" href="/style.css">
+</head>
+<body>
+<header class="top">
+  <a class="home" href="/">🎡</a>
+  <h1>🍔 Зона за хранене</h1>
+  <span class="clock"></span>
+</header>
+<main class="layout-side">
+  <section>
+    <div id="products"></div>
+  </section>
+
+  <aside>
+    <div class="scan"><span class="icon">▥</span><input id="scan" placeholder="Сканирайте картата…" autocomplete="off"></div>
+
+    <div class="panel" style="margin-top:16px" id="cardBox">
+      <div class="muted center pulse">Няма сканирана карта</div>
+    </div>
+
+    <div class="panel" style="margin-top:16px">
+      <div class="row"><h3 class="grow" style="margin:0">Поръчка</h3><button class="ghost sm" id="clear">Изчисти</button></div>
+      <div id="cart"></div>
+      <div class="total"><span>Общо</span><span id="total">0 т.</span></div>
+      <div id="after" class="muted"></div>
+      <button class="primary xl" id="pay" style="width:100%; margin-top:12px" disabled>Плати с точки</button>
+    </div>
+
+    <div class="panel" style="margin-top:16px">
+      <h3>Последни поръчки</h3>
+      <div class="scroll" style="max-height:30vh"><table><tbody id="recent"></tbody></table></div>
+    </div>
+  </aside>
+</main>
+
+<script src="/common.js"></script>
+<script>
+const STATION = station('Хранене');
+let products = [];
+const cart = new Map(); // product_id -> qty
+let card = null;
+let idleTimer;
+
+async function loadProducts() {
+  products = await api('GET', '/api/products');
+  const cats = new Map();
+  for (const p of products) {
+    const c = p.category || 'Продукти';
+    if (!cats.has(c)) cats.set(c, []);
+    cats.get(c).push(p);
+  }
+  $('#products').innerHTML = [...cats].map(([c, list]) => `
+    <div class="cat-title">${esc(c)}</div>
+    <div class="products">${list.map((p) => `
+      <button class="product" data-id="${p.id}">
+        <span>${esc(p.name)}</span>
+        <span class="row" style="width:100%"><span class="pts grow">${p.points} т.</span><span class="badge qty-badge hidden"></span></span>
+      </button>`).join('')}</div>`).join('')
+    || '<div class="panel muted">Няма активни продукти. Добавете ги от <a href="/admin.html">Администрация</a>.</div>';
+  $$('.product').forEach((b) => b.addEventListener('click', () => add(Number(b.dataset.id), 1)));
+  // премахване на продукти, които вече не са активни
+  for (const id of [...cart.keys()]) if (!products.some((p) => p.id === id)) cart.delete(id);
+  render();
+}
+
+function add(id, d) {
+  const q = (cart.get(id) || 0) + d;
+  if (q <= 0) cart.delete(id); else cart.set(id, q);
+  bumpIdle();
+  render();
+}
+
+function total() {
+  let t = 0;
+  for (const [id, q] of cart) { const p = products.find((x) => x.id === id); if (p) t += p.points * q; }
+  return t;
+}
+
+function render() {
+  const lines = [...cart].map(([id, q]) => ({ p: products.find((x) => x.id === id), q })).filter((l) => l.p);
+  $('#cart').innerHTML = lines.map(({ p, q }) => `
+    <div class="cart-line">
+      <span class="n">${esc(p.name)}<div class="muted small">${p.points} т. × ${q}</div></span>
+      <button class="sm ghost" data-m="${p.id}">−</button><span class="q">${q}</span><button class="sm ghost" data-p="${p.id}">+</button>
+      <span style="min-width:60px" class="right"><b>${p.points * q}</b></span>
+    </div>`).join('') || '<p class="muted">Докоснете продукт, за да го добавите.</p>';
+  $$('[data-m]').forEach((b) => b.addEventListener('click', () => add(Number(b.dataset.m), -1)));
+  $$('[data-p]').forEach((b) => b.addEventListener('click', () => add(Number(b.dataset.p), 1)));
+  $$('.product').forEach((b) => {
+    const q = cart.get(Number(b.dataset.id)) || 0;
+    b.classList.toggle('in-cart', q > 0);
+    const badge = $('.qty-badge', b);
+    badge.textContent = '× ' + q;
+    badge.classList.toggle('hidden', q === 0);
+  });
+  const t = total();
+  $('#total').textContent = pts(t);
+  if (card) {
+    const left = card.balance - t;
+    $('#after').innerHTML = left >= 0
+      ? `Остават след плащане: <b class="ok">${pts(left)}</b>`
+      : `<b class="bad">Недостатъчно точки – липсват ${pts(-left)}</b>`;
+  } else $('#after').textContent = cart.size ? 'Сканирайте картата, за да платите.' : '';
+  $('#pay').disabled = !card || !cart.size || card.balance < t || card.blocked;
+}
+
+function showCard() {
+  if (!card) { $('#cardBox').innerHTML = '<div class="muted center pulse">Няма сканирана карта</div>'; return; }
+  $('#cardBox').innerHTML = `
+    <div class="row"><div class="grow"><div class="big">${esc(card.name || 'Без име')}</div><div class="muted">${esc(card.barcode)}</div></div>
+    <button class="ghost sm" id="dropCard">✕</button></div>
+    <div style="margin-top:8px">Баланс: <span class="big" style="color:var(--accent)">${pts(card.balance)}</span></div>
+    ${card.blocked ? '<span class="badge bad">БЛОКИРАНА</span>' : ''}`;
+  $('#dropCard').addEventListener('click', () => { card = null; showCard(); render(); });
+}
+
+async function onScan(code) {
+  try {
+    card = await api('GET', '/api/cards/' + encodeURIComponent(code));
+    beep(!card.blocked);
+    if (card.blocked) toast('Картата е блокирана', 'bad');
+  } catch (e) { beep(false); toast(e.message, 'bad', 4000); card = null; }
+  bumpIdle();
+  showCard();
+  render();
+}
+
+async function pay() {
+  if (!card || !cart.size) return;
+  $('#pay').disabled = true;
+  try {
+    const items = [...cart].map(([product_id, qty]) => ({ product_id, qty }));
+    const r = await api('POST', '/api/purchases', { barcode: card.barcode, items, station: STATION });
+    beep(true);
+    toast(`Платено ${pts(r.total)} · остават ${pts(r.card.balance)}`, 'ok', 4000);
+    cart.clear();
+    card = r.card;
+    showCard();
+    render();
+    loadRecent();
+    // картата се изчиства автоматично след малко
+    clearTimeout(idleTimer);
+    idleTimer = setTimeout(() => { card = null; showCard(); render(); }, 6000);
+  } catch (e) {
+    beep(false); toast(e.message, 'bad', 4000);
+    try { card = await api('GET', '/api/cards/' + encodeURIComponent(card.barcode)); } catch { /* ignore */ }
+    showCard(); render();
+  }
+}
+
+function bumpIdle() {
+  clearTimeout(idleTimer);
+  idleTimer = setTimeout(() => { card = null; cart.clear(); showCard(); render(); }, 120000);
+}
+
+async function loadRecent() {
+  try {
+    const rows = await api('GET', '/api/recent?type=purchases&limit=20');
+    $('#recent').innerHTML = rows.map((r) => `<tr class="${r.voided ? 'voided' : ''}">
+      <td>${fmtTime(r.ts)}</td>
+      <td><b>${esc(r.name || r.barcode)}</b><div class="muted small">${r.items.map((i) => `${i.qty}× ${esc(i.name)}`).join(', ')}</div></td>
+      <td class="right">−${r.total}</td></tr>`).join('') || '<tr><td class="muted">Няма поръчки</td></tr>';
+  } catch { /* ignore */ }
+}
+
+$('#pay').addEventListener('click', pay);
+$('#clear').addEventListener('click', () => { cart.clear(); render(); });
+
+loadProducts().then(loadRecent).catch((e) => toast(e.message, 'bad'));
+setInterval(() => loadProducts().catch(() => {}), 60000);
+bindScanner($('#scan'), onScan);
+</script>
+</body>
+</html>
