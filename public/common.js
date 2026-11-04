@@ -62,10 +62,16 @@ function beep(ok = true) {
 /**
  * Свързва поле за сканиране. Баркод скенерите работят като клавиатура:
  * изписват кода и натискат Enter. Полето автоматично си връща фокуса.
+ * Добавя и бутон 📷 за сканиране с камерата (camera.js).
  */
-function bindScanner(input, onScan) {
+function bindScanner(input, onScan, cameraOptions = {}) {
   const wrap = input.closest('.scan');
   let busy = false;
+  const run = async (code) => {
+    if (!code || busy) return;
+    busy = true;
+    try { await onScan(code); } finally { busy = false; }
+  };
   input.addEventListener('focus', () => wrap && wrap.classList.add('focused'));
   input.addEventListener('blur', () => wrap && wrap.classList.remove('focused'));
   input.addEventListener('keydown', async (e) => {
@@ -73,10 +79,10 @@ function bindScanner(input, onScan) {
     e.preventDefault();
     const code = input.value.trim().toUpperCase();
     input.value = '';
-    if (!code || busy) return;
-    busy = true;
-    try { await onScan(code); } finally { busy = false; }
+    await run(code);
   });
+  // Бутон 📷 – сканиране с камерата на устройството
+  if (typeof CameraScanner !== 'undefined' && cameraOptions !== false) CameraScanner.attach(input, run, cameraOptions);
   // Връщане на фокуса, ако потребителят не пише в друго поле
   const refocus = () => {
     const a = document.activeElement;

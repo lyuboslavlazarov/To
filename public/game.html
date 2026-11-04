@@ -46,6 +46,7 @@
 </main>
 
 <script src="/common.js"></script>
+<script src="/camera.js"></script>
 <script>
 let game = null;
 let selected = null; // избрани точки
@@ -69,7 +70,7 @@ async function init() {
   document.title = game.name;
   buildPicker();
   loadRecent();
-  bindScanner($('#scan'), onScan);
+  bindScanner($('#scan'), onScan, { keepOpen: true });
   setInterval(loadRecent, 15000);
 }
 

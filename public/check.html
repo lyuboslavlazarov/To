@@ -22,6 +22,7 @@
 <div class="kiosk" id="view"></div>
 
 <script src="/common.js"></script>
+<script src="/camera.js"></script>
 <script>
 let timer;
 
@@ -65,7 +66,7 @@ async function onScan(code) {
 
 api('GET', '/api/settings').then((s) => { $('#park').textContent = s.park_name + ' – Проверка на точки'; }).catch(() => {});
 idle();
-bindScanner($('#scan'), onScan);
+bindScanner($('#scan'), onScan, { keepOpen: true, facing: 'user' });
 </script>
 </body>
 </html>

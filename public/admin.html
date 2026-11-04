@@ -140,6 +140,7 @@
 </main>
 
 <script src="/common.js"></script>
+<script src="/camera.js"></script>
 <script>
 let settings = {};
 const pinQ = () => (getPin() ? '&pin=' + encodeURIComponent(getPin()) : '');
@@ -411,6 +412,9 @@ $('#genPrint').addEventListener('click', () => {
   const g = genCodes();
   window.open(`/print.html?prefix=${encodeURIComponent(g.prefix)}&digits=${g.digits}&start=${g.start}&count=${g.count}`, '_blank');
 });
+
+// сканиране на карта с камерата в „Карти и посетители“
+CameraScanner.attach($('#cardSearch'), async (code) => { openTab('cards'); await openCard(code); });
 
 // ---------- старт ----------
 api('GET', '/api/settings').then((s) => { settings = s; }).finally(() => {

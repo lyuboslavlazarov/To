@@ -1,5 +1,6 @@
 'use strict';
 const http = require('node:http');
+const https = require('node:https');
 const fs = require('node:fs');
 const path = require('node:path');
 const os = require('node:os');
@@ -7,6 +8,8 @@ const { db, tx, DB_FILE } = require('./db');
 const backup = require('./backup');
 
 const PORT = Number(process.env.PORT) || 3000;
+const HTTPS_PORT = process.env.HTTPS_PORT === undefined ? 3443 : Number(process.env.HTTPS_PORT); // 0 = без https
+let httpsActive = 0;
 const ADMIN_PIN = process.env.ADMIN_PIN || '';
 const PUBLIC_DIR = path.join(__dirname, 'public');
 
@@ -98,7 +101,7 @@ function route(method, pattern, handler, opts = {}) {
   routes.push({ method, re, keys, handler, admin: !!opts.admin });
 }
 
-route('GET', '/api/ping', () => ({ ok: true, time: now(), admin_pin: !!ADMIN_PIN }));
+route('GET', '/api/ping', () => ({ ok: true, time: now(), admin_pin: !!ADMIN_PIN, https_port: httpsActive || null }));
 
 // Настройки
 route('GET', '/api/settings', () => getSettings());
@@ -463,7 +466,7 @@ function readBody(req) {
   });
 }
 
-const server = http.createServer(async (req, res) => {
+const handler = async (req, res) => {
   const url = new URL(req.url, 'http://localhost');
   const pathname = decodeURIComponent(url.pathname);
   if (!pathname.startsWith('/api/')) return serveStatic(req, res, pathname);
@@ -491,16 +494,41 @@ const server = http.createServer(async (req, res) => {
     if (!(e instanceof HttpError)) console.error(e);
     send(e.status || 500, { error: e.status ? e.message : 'Вътрешна грешка: ' + e.message });
   }
-});
+};
+const server = http.createServer(handler);
+
+function startHttps() {
+  if (!HTTPS_PORT) return Promise.resolve(null);
+  let creds;
+  try {
+    creds = require('./tls').loadOrCreate(path.dirname(DB_FILE));
+  } catch (e) {
+    console.log(`   ⚠  https не е включен (няма openssl или сертификат): ${e.message}`);
+    return Promise.resolve(null);
+  }
+  return new Promise((resolve) => {
+    const s = https.createServer(creds, handler);
+    s.on('error', (e) => { console.log(`   ⚠  https не може да стартира на порт ${HTTPS_PORT}: ${e.message}`); resolve(null); });
+    s.listen(HTTPS_PORT, '0.0.0.0', () => { httpsActive = HTTPS_PORT; resolve(s); });
+  });
+}
 
 if (require.main === module) {
   backup.start();
-  server.listen(PORT, '0.0.0.0', () => {
+  server.listen(PORT, '0.0.0.0', async () => {
+    await startHttps();
+    const lan = [];
+    for (const list of Object.values(os.networkInterfaces())) {
+      for (const n of list || []) if (n.family === 'IPv4' && !n.internal) lan.push(n.address);
+    }
     console.log(`\n🎡 Лунапарк сървърът работи на порт ${PORT}`);
     console.log(`   База данни: ${DB_FILE}`);
     console.log(`   Локално:    http://localhost:${PORT}`);
-    for (const list of Object.values(os.networkInterfaces())) {
-      for (const n of list || []) if (n.family === 'IPv4' && !n.internal) console.log(`   В мрежата:  http://${n.address}:${PORT}`);
+    for (const ip of lan) console.log(`   В мрежата:  http://${ip}:${PORT}`);
+    if (httpsActive) {
+      console.log(`\n   📷 За сканиране с камера на таблети и телефони отворете защитения адрес:`);
+      for (const ip of lan) console.log(`   В мрежата:  https://${ip}:${httpsActive}`);
+      console.log('   (първия път браузърът показва предупреждение – изберете „Продължи“)\n');
     }
     console.log(`   Резервни копия: ${backup.status().effective_dir} (на всеки ${backup.status().interval} мин.)`);
     if (!ADMIN_PIN) console.log('   ⚠  ADMIN_PIN не е зададен – администрацията е без парола.');
