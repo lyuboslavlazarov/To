@@ -1,0 +1,99 @@
+/*
+ * Тема „Рождествен Лунапарк – Тайните на звездата“ за екраните на служителите.
+ * Същата визия като приложението на клиентите, но с ясни таблици и бутони за работа.
+ */
+:root {
+  --bg: #070d2b;
+  --bg2: #0f1740;
+  --card: rgba(16, 24, 66, .86);
+  --line: rgba(232, 196, 106, .26);
+  --text: #f6eedb;
+  --muted: #b9bde8;
+  --accent: #ffd76a;
+  --accent2: #ffe7a3;
+  --gold: #e8c46a;
+}
+body {
+  background-color: #070d2b;
+  background-image:
+    radial-gradient(1.5px 1.5px at 12% 18%, #fff, transparent), radial-gradient(1px 1px at 70% 12%, #fff, transparent),
+    radial-gradient(1.5px 1.5px at 86% 46%, #ffe9a8, transparent), radial-gradient(1px 1px at 38% 66%, #fff, transparent),
+    radial-gradient(1px 1px at 8% 84%, #fff, transparent), radial-gradient(1.5px 1.5px at 58% 92%, #ffe9a8, transparent),
+    radial-gradient(1px 1px at 93% 78%, #fff, transparent), radial-gradient(1px 1px at 28% 44%, #fff, transparent),
+    linear-gradient(180deg, #0b1442 0%, #070d2b 55%, #050819 100%);
+  background-attachment: fixed;
+  background-size: 520px 600px, 470px 560px, 560px 640px, 500px 580px, 540px 620px, 510px 590px, 480px 560px, 530px 610px, 100% 100%;
+}
+
+/* горна лента с картината от плаката */
+header.top {
+  min-height: 74px;
+  background: linear-gradient(90deg, rgba(7, 13, 43, .85) 0%, rgba(7, 13, 43, .25) 45%, rgba(7, 13, 43, .85) 100%), url(/theme/header-strip.jpg) center top / cover;
+  border-bottom: 2px solid rgba(232, 196, 106, .55);
+  box-shadow: 0 4px 24px rgba(0, 0, 0, .45);
+}
+header.top h1 { font-family: 'Marck Script', cursive; font-weight: 400; font-size: 1.9em; color: var(--accent2);
+  text-shadow: 0 0 10px rgba(255, 200, 80, .55); letter-spacing: .5px; }
+header.top .clock { color: var(--accent2); font-variant-numeric: tabular-nums; text-shadow: 0 1px 4px rgba(0, 0, 0, .8); }
+header.top .home { filter: drop-shadow(0 0 6px rgba(255, 210, 110, .6)); }
+header.top button.ghost { border-color: var(--gold); color: var(--accent2); background: rgba(7, 13, 43, .6); }
+
+/* панели, полета, бутони */
+.panel, .tile, .product, .stat, .result, .modal { background: var(--card); border-color: var(--line); }
+.stat { background: rgba(8, 14, 44, .7); }
+.stat .v { color: var(--accent2); }
+input, select, textarea { background: rgba(8, 14, 44, .85); border-color: rgba(232, 196, 106, .3); color: var(--text); }
+button, .btn { background: #26306e; }
+button.primary { background: linear-gradient(180deg, #ffe08a, #e8b84a); color: #3a2400; box-shadow: 0 0 14px rgba(255, 200, 80, .3); }
+button.ghost { background: transparent; }
+.tabs button { background: rgba(8, 14, 44, .7); }
+.tabs button.active { background: linear-gradient(180deg, #ffe08a, #e8b84a); color: #3a2400; }
+.scan { background: rgba(8, 14, 44, .75); border-color: rgba(232, 196, 106, .6); }
+.scan.focused { box-shadow: 0 0 0 4px rgba(255, 215, 106, .18); }
+h2, h3 { color: var(--accent2); }
+th { color: #cfc6a8; }
+td, th { border-bottom-color: rgba(232, 196, 106, .14); }
+.bar { background: linear-gradient(90deg, #e8b84a, #ffe08a); box-shadow: 0 0 8px rgba(255, 200, 80, .4); }
+.badge { background: #2a3270; }
+.result.ok { border-color: #2ecc71; box-shadow: 0 0 24px rgba(46, 204, 113, .18); }
+
+/* начален екран */
+.tile { backdrop-filter: blur(2px); }
+.tile:hover { border-color: var(--gold); box-shadow: 0 0 20px rgba(255, 210, 110, .25); }
+.tile h3 { font-family: 'Marck Script', cursive; font-weight: 400; font-size: 1.6em; }
+
+/* зона за хранене */
+.product { background: rgba(16, 24, 66, .9); }
+.product .pts { color: var(--accent); }
+.product.in-cart { border-color: var(--gold); box-shadow: inset 0 0 0 1px var(--gold), 0 0 16px rgba(255, 210, 110, .25); }
+.cat-title { font-family: 'Marck Script', cursive; text-transform: none; letter-spacing: 0; font-size: 1.5em; color: var(--accent2); }
+
+/* „Тайните на звездата“: звезди за оставащите игри */
+.stars { display: flex; justify-content: center; flex-wrap: wrap; gap: 3px; line-height: 1; margin-top: 8px; }
+.stars b { color: #ffd76a; text-shadow: 0 0 8px rgba(255, 200, 80, .9); font-weight: 400; }
+.stars i { color: #3a416e; font-style: normal; }
+
+/* светещи точки */
+.glow-pts { font-family: 'Poiret One', system-ui, sans-serif; font-weight: 400; color: var(--accent);
+  text-shadow: 0 0 14px rgba(255, 200, 80, .8), 0 0 30px rgba(255, 190, 60, .35); }
+.kiosk .pts { font-family: 'Poiret One', system-ui, sans-serif; font-weight: 400; text-shadow: 0 0 18px rgba(255, 200, 80, .8), 0 0 40px rgba(255, 190, 60, .35); }
+.kiosk .name { font-family: 'Marck Script', cursive; font-weight: 400; color: var(--accent2); }
+
+/* червена кадифена завеса с панделка */
+.velvet { position: relative; border-radius: 16px; padding: 30px 18px 14px; margin-top: 26px; border: 1px solid rgba(232, 196, 106, .55);
+  background:
+    repeating-linear-gradient(90deg, rgba(0,0,0,.28) 0 6px, rgba(255,255,255,.05) 14px, rgba(0,0,0,.22) 26px, rgba(0,0,0,.35) 34px),
+    linear-gradient(180deg, #9a1622 0%, #6d0c16 60%, #4a0710 100%);
+  box-shadow: 0 10px 30px rgba(0,0,0,.45); color: #fbe9d0; text-align: left; }
+.ribbon { position: absolute; left: 50%; top: -18px; transform: translateX(-50%) rotate(-2deg); white-space: nowrap; z-index: 1;
+  padding: 5px 28px; background: linear-gradient(180deg, #d42a35, #a8141f); color: #fff4d8;
+  font-family: 'Marck Script', cursive; font-size: 22px; box-shadow: 0 4px 10px rgba(0,0,0,.45); }
+.ribbon::before, .ribbon::after { content: ''; position: absolute; top: 7px; border: 16px solid #7f0c16; z-index: -1; }
+.ribbon::before { left: -21px; border-left-color: transparent; }
+.ribbon::after { right: -21px; border-right-color: transparent; }
+.velvet .prog-item { display: flex; gap: 14px; align-items: baseline; padding: 8px 0; border-bottom: 1px dashed rgba(255, 220, 170, .28); }
+.velvet .prog-item:last-child { border-bottom: 0; }
+.velvet .prog-item .w { min-width: 80px; font-weight: 700; color: #ffd98a; font-variant-numeric: tabular-nums; }
+.velvet .prog-item.now { background: rgba(255, 215, 106, .14); border-radius: 8px; padding-left: 8px; }
+
+#toast.ok { background: linear-gradient(180deg, #3ad681, #23a85f); }

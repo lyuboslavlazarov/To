@@ -5,6 +5,8 @@
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Пост за вход</title>
 <link rel="stylesheet" href="/style.css">
+<link rel="stylesheet" href="/fonts/fonts.css">
+<link rel="stylesheet" href="/theme/staff.css">
 </head>
 <body>
 <header class="top">
@@ -183,7 +185,7 @@ function entryResult(card, visitId) {
   showResult('ok', `<div class="row">
       <div class="grow"><div class="big ok">✅ Вход записан: ${money(card.last_amount ?? $('#fee').value, settings.currency)}</div>
       <div>${esc(card.name || 'Без име')} · <b>${esc(card.barcode)}</b> · вход №${card.visits} · ${fmtTime(card.last_visit)}</div>
-      ${card.games && card.games.limited ? `<div class="big" style="margin-top:4px">🎯 Остават игри: <span style="color:${gamesColor(card.games)}">${card.games.remaining}</span></div>` : ''}</div>
+      ${card.games && card.games.limited ? `<div class="big" style="margin-top:4px">⭐ Остават игри: <span style="color:${gamesColor(card.games)}">${card.games.remaining}</span></div>${starsHtml(card.games, 20).replace('style="', 'style="justify-content:flex-start;')}` : ''}</div>
       <button class="ghost sm" id="undoEntry">↩ Отмени входа</button></div>`);
   $('#undoEntry').addEventListener('click', async () => {
     if (!confirm('Да се отмени ли записаният вход?')) return;

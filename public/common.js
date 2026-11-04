@@ -162,6 +162,35 @@ async function appUrl() {
   const host = /^(localhost|127\.|\[?::1)/.test(location.hostname) && p.lan_ip ? p.lan_ip : location.hostname;
   return `http://${host}:${p.public_port || 3080}/app`;
 }
+/** „Тайните на звездата“: оставащите игри като златни звезди */
+function starsHtml(g, size = 26) {
+  if (!g || !g.limited || !g.allowed || g.allowed > 30) return '';
+  return `<div class="stars" style="font-size:${size}px">${'<b>★</b>'.repeat(g.remaining)}${'<i>☆</i>'.repeat(Math.max(0, g.allowed - g.remaining))}</div>`;
+}
+/** Програма от настройките: „12.12 17:00 | 🎭 Театрална постановка“ -> [{date, time, when, title}] */
+function parseProgram(text) {
+  const year = new Date().getFullYear();
+  return String(text || '').split('\n').map((l) => l.trim()).filter(Boolean).map((line) => {
+    const i = line.indexOf('|');
+    let when = i >= 0 ? line.slice(0, i).trim() : '';
+    const title = (i >= 0 ? line.slice(i + 1) : line).trim();
+    let date = null;
+    const m = when.match(/^(\d{1,2})\.(\d{1,2})(?:\.(\d{4}))?\.?\s*(.*)$/);
+    if (m) { date = `${m[3] || year}-${m[2].padStart(2, '0')}-${m[1].padStart(2, '0')}`; when = m[4] || 'цял ден'; }
+    const t = when.match(/^(\d{1,2}):(\d{2})/);
+    return { date, time: t ? `${t[1].padStart(2, '0')}:${t[2]}` : null, when, title };
+  });
+}
+/** Днешната програма като червена завеса с панделка (празно, ако няма) */
+function programTodayHtml(text, ribbon = 'Очакват ви днес') {
+  const T = todayStr();
+  const d = new Date(); const hm = `${String(d.getHours()).padStart(2, '0')}:${String(d.getMinutes()).padStart(2, '0')}`;
+  const list = parseProgram(text).filter((p) => !p.date || p.date === T);
+  if (!list.length) return '';
+  const next = list.findIndex((p) => p.time && p.time >= hm);
+  return `<div class="velvet"><div class="ribbon">${esc(ribbon)}</div>${list.map((p, i) =>
+    `<div class="prog-item ${i === next ? 'now' : ''}"><span class="w">${esc(p.when)}</span><span>${esc(p.title)}</span></div>`).join('')}</div>`;
+}
 function pts(n) { return `${Number(n || 0).toLocaleString('bg-BG')} т.`; }
 function money(n, cur = '€') { return `${Number(n || 0).toLocaleString('bg-BG', { maximumFractionDigits: 2 })} ${cur}`; }
 

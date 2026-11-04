@@ -5,6 +5,8 @@
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Проверка на точки</title>
 <link rel="stylesheet" href="/style.css">
+<link rel="stylesheet" href="/fonts/fonts.css">
+<link rel="stylesheet" href="/theme/staff.css">
 <style>
   .scan.mini { position: fixed; bottom: 12px; left: 12px; width: 230px; opacity: .45; padding: 6px 10px; }
   .scan.mini input { font-size: 1em; }
@@ -27,12 +29,14 @@
 <script src="/camera.js"></script>
 <script>
 let timer;
+let program = '';
 
 function idle() {
   $('#view').innerHTML = `
-    <div class="huge pulse">▥</div>
+    <div class="huge pulse" style="color:var(--accent); text-shadow:0 0 18px rgba(255,200,80,.7)">★</div>
     <div class="name">Сканирайте картата си</div>
-    <div class="sub">и вижте колко точки имате 🎉</div>`;
+    <div class="sub">и вижте колко точки и звезди имате ✨</div>
+    <div style="width:min(720px,100%)">${programTodayHtml(program)}</div>`;
 }
 
 async function onScan(code) {
@@ -44,10 +48,10 @@ async function onScan(code) {
     const t = todayStr();
     const playsToday = h.plays.filter((p) => !p.voided && p.ts.startsWith(t));
     $('#view').innerHTML = `
-      <div class="name">${c.name ? 'Здравей, ' + esc(c.name) + '!' : 'Карта ' + esc(c.barcode)}</div>
+      <div class="name">${c.name ? 'Здравей, ' + esc(c.name.split(' ')[0]) + '! ✨' : 'Карта ' + esc(c.barcode)}</div>
       <div class="sub">Твоите точки</div>
       <div class="pts">${Number(c.balance).toLocaleString('bg-BG')}</div>
-      ${c.games.limited ? `<div class="name">🎯 Остават игри: <span style="color:${gamesColor(c.games)}">${c.games.remaining}</span> <span class="sub">от ${c.games.allowed}</span></div>
+      ${c.games.limited ? `${starsHtml(c.games, 44)}<div class="sub" style="font-size:1.6em">Остават ти <b style="color:var(--accent)">${c.games.remaining} ${c.games.remaining === 1 ? 'звезда' : 'звезди'}</b> = ${c.games.remaining} ${c.games.remaining === 1 ? 'игра' : 'игри'}</div>
         ${c.games.remaining === 0 ? '<div class="sub">За още игри платете нов вход</div>' : ''}` : ''}
       <div class="sub">Днес: ${playsToday.length} игри · Общо: ${c.plays} игри · ${c.visits} посещения</div>
       ${c.replaced_by ? `<div class="badge bad">ТАЗИ КАРТА Е ЗАМЕНЕНА С ${esc(c.replaced_by)} – използвайте новата карта</div>` : c.blocked ? '<div class="badge bad">КАРТАТА Е БЛОКИРАНА</div>' : ''}
@@ -68,8 +72,9 @@ async function onScan(code) {
   timer = setTimeout(idle, 15000);
 }
 
-api('GET', '/api/settings').then((s) => { $('#park').textContent = s.park_name + ' – Проверка на точки'; }).catch(() => {});
+api('GET', '/api/settings').then((s) => { $('#park').textContent = s.park_name + ' – Проверка на точки'; program = s.program || ''; idle(); }).catch(() => {});
 idle();
+setInterval(() => { if (!timer || $('#view .pulse')) idle(); }, 60000); // програмата се обновява
 bindScanner($('#scan'), onScan, { keepOpen: true, facing: 'user' });
 </script>
 </body>
