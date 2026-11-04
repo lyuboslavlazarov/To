@@ -10,6 +10,8 @@ const backup = require('./backup');
 const PORT = Number(process.env.PORT) || 3000;
 const HTTPS_PORT = process.env.HTTPS_PORT === undefined ? 3443 : Number(process.env.HTTPS_PORT); // 0 = без https
 let httpsActive = 0;
+// Порт само за клиентското приложение (телефоните на посетителите). Само него пускайте към интернет.
+const PUBLIC_PORT = process.env.PUBLIC_PORT === undefined ? 3080 : Number(process.env.PUBLIC_PORT); // 0 = изключено
 const ADMIN_PIN = process.env.ADMIN_PIN || '';
 const PUBLIC_DIR = path.join(__dirname, 'public');
 
@@ -58,6 +60,16 @@ const balance = (code) => qBalance.get(code).balance;
 
 const qCard = db.prepare('SELECT * FROM cards WHERE barcode = ?');
 
+// Физическа карта, свързана към профил -> профилът. Така и телефонът (виртуалната карта),
+// и физическата карта водят към едни и същи точки, игри и история.
+function resolveCode(code) {
+  const row = qCard.get(code);
+  if (row && row.linked_to && !row.replaced_by) return row.linked_to;
+  return code;
+}
+const cardCode = (c) => resolveCode(normCode(c));
+const qLinked = db.prepare('SELECT barcode FROM cards WHERE linked_to=? AND replaced_by IS NULL ORDER BY barcode');
+
 // Колко игри остават на картата: всеки платен вход дава plays_per_entry игри.
 // При plays_expire_daily=1 се броят само днешните входове и игри (неизползваните изгарят).
 function playsInfo(code, s = getSettings()) {
@@ -84,7 +96,7 @@ function cardSummary(code) {
       (SELECT COALESCE(SUM(amount),0) FROM visits WHERE barcode=?1 AND voided=0) AS entry_paid,
       (SELECT MAX(ts) FROM visits WHERE barcode=?1 AND voided=0) AS last_visit,
       (SELECT COUNT(*) FROM visits WHERE barcode=?1 AND voided=0 AND substr(ts,1,10)=?2) AS visits_today`).get(code, today());
-  return { ...c, ...s, entered_today: s.visits_today > 0, balance: balance(code), games: playsInfo(code) };
+  return { ...c, ...s, entered_today: s.visits_today > 0, balance: balance(code), games: playsInfo(code), linked: qLinked.all(code).map((r) => r.barcode) };
 }
 function requireCard(code) {
   const c = cardSummary(code);
@@ -108,7 +120,8 @@ function cardHistory(code) {
       WHERE p.barcode=? AND p.voided=0 GROUP BY i.name ORDER BY qty DESC`).all(code);
   const replacements = db.prepare('SELECT * FROM card_replacements WHERE new_barcode=? OR old_barcode=? ORDER BY id DESC').all(code, code);
   const cardStays = stays('0000-01-01 00:00:00', '9999-12-31 23:59:59', code);
-  return { visits, plays, purchases, adjustments, byGame, byProduct, replacements, stays: cardStays, stay: staySummary(cardStays) };
+  const devices = db.prepare('SELECT COUNT(*) AS n FROM customer_sessions WHERE barcode=?').get(code).n;
+  return { visits, plays, purchases, adjustments, byGame, byProduct, replacements, stays: cardStays, stay: staySummary(cardStays), devices };
 }
 
 // ---------- API ----------
@@ -119,12 +132,18 @@ function route(method, pattern, handler, opts = {}) {
   routes.push({ method, re, keys, handler, admin: !!opts.admin });
 }
 
-route('GET', '/api/ping', () => ({ ok: true, time: now(), admin_pin: !!ADMIN_PIN, https_port: httpsActive || null }));
+function lanIp() {
+  for (const list of Object.values(os.networkInterfaces())) {
+    for (const n of list || []) if (n.family === 'IPv4' && !n.internal) return n.address;
+  }
+  return null;
+}
+route('GET', '/api/ping', () => ({ ok: true, time: now(), admin_pin: !!ADMIN_PIN, https_port: httpsActive || null, public_port: PUBLIC_PORT || null, lan_ip: lanIp() }));
 
 // Настройки
 route('GET', '/api/settings', () => getSettings());
 route('PUT', '/api/settings', ({ body }) => {
-  const allowed = ['park_name', 'entry_fee', 'entry_points', 'currency', 'backup_dir', 'backup_interval', 'plays_per_entry', 'plays_expire_daily'];
+  const allowed = ['park_name', 'entry_fee', 'entry_points', 'currency', 'backup_dir', 'backup_interval', 'plays_per_entry', 'plays_expire_daily', 'public_url'];
   const up = db.prepare('INSERT INTO settings(key,value) VALUES(?,?) ON CONFLICT(key) DO UPDATE SET value=excluded.value');
   for (const k of allowed) {
     if (body[k] === undefined) continue;
@@ -132,6 +151,10 @@ route('PUT', '/api/settings', ({ body }) => {
     if (k === 'entry_fee') { const n = Number(v); if (!(n >= 0)) throw bad('Невалидна цена на вход'); v = String(n); }
     if (k === 'entry_points') v = String(int(v, 'начални точки', { min: 0, max: 100000 }));
     if (k === 'backup_interval') v = String(int(v, 'интервал', { min: 5, max: 1440 }));
+    if (k === 'public_url') {
+      v = str(body[k], 300).replace(/\/+$/, '');
+      if (v && !/^https?:\/\/[^\s/]+/i.test(v)) throw bad('Адресът трябва да започва с https://');
+    }
     if (k === 'plays_per_entry') v = String(int(v, 'игри за един вход', { min: 0, max: 10000 }));
     if (k === 'plays_expire_daily') v = body[k] === true || body[k] === '1' || body[k] === 1 ? '1' : '0';
     if (k === 'backup_dir') {
@@ -153,7 +176,7 @@ route('POST', '/api/backup', () => {
 route('GET', '/api/cards', ({ query }) => {
   const q = `%${str(query.q, 64)}%`;
   const limit = Math.min(Number(query.limit) || 1000, 5000);
-  const rows = db.prepare(`SELECT c.barcode, c.name, c.phone, c.age, c.blocked, c.replaced_by,
+  const rows = db.prepare(`SELECT c.barcode, c.name, c.phone, c.age, c.blocked, c.replaced_by, c.kind, c.linked_to,
       (SELECT COUNT(*) FROM visits v WHERE v.barcode=c.barcode AND v.voided=0) AS visits,
       (SELECT COUNT(*) FROM plays p WHERE p.barcode=c.barcode AND p.voided=0) AS plays,
       (SELECT COUNT(*) FROM purchases u WHERE u.barcode=c.barcode AND u.voided=0) AS purchases,
@@ -166,13 +189,13 @@ route('GET', '/api/cards', ({ query }) => {
 });
 
 route('GET', '/api/cards/:code', ({ params }) => {
-  const c = cardSummary(normCode(params.code));
+  const c = cardSummary(cardCode(params.code));
   if (!c) throw notFound(`Картата ${normCode(params.code)} не е регистрирана`);
   return c;
 });
 
 route('GET', '/api/cards/:code/history', ({ params }) => {
-  const code = normCode(params.code);
+  const code = cardCode(params.code);
   const c = cardSummary(code);
   if (!c) throw notFound(`Картата ${code} не е регистрирана`);
   return { card: c, ...cardHistory(code) };
@@ -180,7 +203,7 @@ route('GET', '/api/cards/:code/history', ({ params }) => {
 
 // Въвеждане / редакция на информация за играещия (създава картата, ако не съществува)
 route('PUT', '/api/cards/:code', ({ params, body }) => {
-  const code = normCode(params.code);
+  const code = cardCode(params.code);
   const t = now();
   const age = body.age === '' || body.age == null ? null : int(body.age, 'възраст', { min: 0, max: 120 });
   const exists = qCard.get(code);
@@ -195,7 +218,7 @@ route('PUT', '/api/cards/:code', ({ params, body }) => {
 });
 
 route('POST', '/api/cards/:code/block', ({ params, body }) => {
-  const code = normCode(params.code);
+  const code = cardCode(params.code);
   if (!qCard.get(code)) throw notFound('Няма такава карта');
   db.prepare('UPDATE cards SET blocked=?, updated_at=? WHERE barcode=?').run(body.blocked ? 1 : 0, now(), code);
   return cardSummary(code);
@@ -204,9 +227,63 @@ route('POST', '/api/cards/:code/block', ({ params, body }) => {
 // Замяна на изгубена карта: старата не се сканира (намира се по име/телефон/номер),
 // сканира се само новата. Данните, точките, игрите и цялата история минават на новата карта,
 // а старата се блокира с отбелязване с коя карта е заменена.
+function checkFreeCard(code) {
+  const row = qCard.get(code);
+  if (!row) return null;
+  if (row.replaced_by) throw bad(`Картата ${code} е стара (изгубена) карта – не може да се използва`);
+  if (row.linked_to) throw bad(`Картата ${code} вече е свързана с ${row.linked_to}`);
+  if (row.blocked) throw bad(`Картата ${code} е блокирана`);
+  if (row.kind === 'virtual') throw bad(`${code} е виртуална карта, не физическа`);
+  const used = db.prepare(`SELECT
+      (SELECT COUNT(*) FROM visits WHERE barcode=?1) + (SELECT COUNT(*) FROM plays WHERE barcode=?1)
+    + (SELECT COUNT(*) FROM purchases WHERE barcode=?1) + (SELECT COUNT(*) FROM adjustments WHERE barcode=?1)
+    + (SELECT COUNT(*) FROM cards WHERE linked_to=?1) AS n`).get(code).n;
+  if (used > 0) throw bad(`Картата ${code} вече е използвана от друг посетител – вземете неизползвана карта`);
+  return row;
+}
+
+// Свързване на физическа карта към профил (резервна карта за виртуален потребител
+// или втора карта). Сканира се профилът (телефонът) и после физическата карта.
+route('POST', '/api/cards/:code/link', ({ params, body }) => {
+  const main = cardCode(params.code);
+  const mainRow = qCard.get(main);
+  if (!mainRow) throw notFound(`Няма карта ${main}`);
+  if (mainRow.replaced_by || mainRow.blocked) throw bad(`Картата ${main} е блокирана`);
+  const phys = normCode(body.card);
+  if (phys === main) throw bad('Това е същата карта');
+  const row = checkFreeCard(phys);
+  const t = now();
+  if (row) db.prepare('UPDATE cards SET linked_to=?, updated_at=? WHERE barcode=?').run(main, t, phys);
+  else db.prepare("INSERT INTO cards(barcode,kind,linked_to,created_at,updated_at) VALUES(?, 'card', ?, ?, ?)").run(phys, main, t, t);
+  return cardSummary(main);
+});
+route('POST', '/api/cards/:code/unlink', ({ params, body }) => {
+  const main = cardCode(params.code);
+  const phys = normCode(body.card);
+  const r = db.prepare('UPDATE cards SET linked_to=NULL, updated_at=? WHERE barcode=? AND linked_to=?').run(now(), phys, main);
+  if (!r.changes) throw notFound('Картата не е свързана с този профил');
+  return cardSummary(main);
+}, { admin: true });
+
 route('POST', '/api/cards/:code/replace', ({ params, body }) => {
-  const oldCode = normCode(params.code);
+  const oldCode = cardCode(params.code);
   const newCode = normCode(body.new_barcode);
+  const mainRow = qCard.get(oldCode);
+  if (mainRow && mainRow.kind === 'virtual' && !mainRow.replaced_by) {
+    // виртуален потребител: профилът остава, сменя се само физическата (резервна) карта
+    if (newCode === oldCode) throw bad('Сканирайте новата физическа карта');
+    const row = checkFreeCard(newCode);
+    const t = now();
+    tx(() => {
+      for (const a of qLinked.all(oldCode)) {
+        db.prepare('UPDATE cards SET blocked=1, replaced_by=?, updated_at=? WHERE barcode=?').run(newCode, t, a.barcode);
+        db.prepare('INSERT INTO card_replacements(old_barcode,new_barcode,reason,ts) VALUES(?,?,?,?)').run(a.barcode, newCode, str(body.reason) || 'Изгубена карта', t);
+      }
+      if (row) db.prepare('UPDATE cards SET linked_to=?, updated_at=? WHERE barcode=?').run(oldCode, t, newCode);
+      else db.prepare("INSERT INTO cards(barcode,kind,linked_to,created_at,updated_at) VALUES(?, 'card', ?, ?, ?)").run(newCode, oldCode, t, t);
+    });
+    return { old_barcode: oldCode, card: cardSummary(oldCode) };
+  }
   if (oldCode === newCode) throw bad('Новата карта трябва да е различна от старата');
   const old = qCard.get(oldCode);
   if (!old) throw notFound(`Няма карта ${oldCode}`);
@@ -227,6 +304,8 @@ route('POST', '/api/cards/:code/replace', ({ params, body }) => {
     } else {
       db.prepare('INSERT INTO cards(barcode,name,phone,age,note,created_at,updated_at) VALUES(?,?,?,?,?,?,?)').run(newCode, old.name, old.phone, old.age, old.note, t, t);
     }
+    db.prepare('UPDATE customer_sessions SET barcode=? WHERE barcode=?').run(newCode, oldCode);
+    db.prepare('UPDATE cards SET linked_to=? WHERE linked_to=?').run(newCode, oldCode);
     for (const tbl of ['visits', 'plays', 'purchases', 'adjustments']) {
       db.prepare(`UPDATE ${tbl} SET barcode=? WHERE barcode=?`).run(newCode, oldCode);
     }
@@ -238,8 +317,15 @@ route('POST', '/api/cards/:code/replace', ({ params, body }) => {
   return { old_barcode: oldCode, card: cardSummary(newCode) };
 }, { admin: !!process.env.REPLACE_REQUIRES_PIN });
 
+// Изключване на всички телефони, свързани с картата (напр. при спор или смяна на собственик)
+route('POST', '/api/cards/:code/customer-logout', ({ params }) => {
+  const code = cardCode(params.code);
+  const r = db.prepare('DELETE FROM customer_sessions WHERE barcode=?').run(code);
+  return { removed: Number(r.changes) };
+}, { admin: true });
+
 route('POST', '/api/cards/:code/adjust', ({ params, body }) => {
-  const code = normCode(params.code);
+  const code = cardCode(params.code);
   if (!qCard.get(code)) throw notFound('Няма такава карта');
   const pts = int(body.points, 'точки', { min: -1000000, max: 1000000 });
   if (pts === 0) throw bad('Въведете точки различни от 0');
@@ -270,7 +356,7 @@ route('POST', '/api/cards/generate', ({ body }) => {
 
 // Вход (плащане 20€ – само за статистика)
 route('POST', '/api/entry', ({ body }) => {
-  const code = normCode(body.barcode);
+  const code = cardCode(body.barcode);
   requireCard(code);
   const s = getSettings();
   const amount = body.amount != null && body.amount !== '' ? Number(body.amount) : Number(s.entry_fee);
@@ -310,7 +396,7 @@ route('PUT', '/api/games/:id', ({ params, body }) => {
 
 // Изиграване на игра – добавяне на точки
 route('POST', '/api/plays', ({ body }) => {
-  const code = normCode(body.barcode);
+  const code = cardCode(body.barcode);
   const card = requireCard(code);
   const game = db.prepare('SELECT * FROM games WHERE id=?').get(int(body.game_id, 'игра'));
   if (!game) throw notFound('Няма такава игра');
@@ -371,7 +457,7 @@ route('PUT', '/api/products/:id', ({ params, body }) => {
 
 // Покупка в зоната за хранене – изваждане на точки
 route('POST', '/api/purchases', ({ body }) => {
-  const code = normCode(body.barcode);
+  const code = cardCode(body.barcode);
   if (!Array.isArray(body.items) || body.items.length === 0) throw bad('Количката е празна');
   return tx(() => {
     requireCard(code);
@@ -516,6 +602,8 @@ route('GET', '/api/stats', ({ query }) => {
     totals: {
       cards_total: db.prepare('SELECT COUNT(*) AS n FROM cards').get().n,
       cards_with_holder: db.prepare("SELECT COUNT(*) AS n FROM cards WHERE name<>''").get().n,
+      virtual_users: db.prepare("SELECT COUNT(*) AS n FROM cards WHERE kind='virtual'").get().n,
+      app_users: db.prepare('SELECT COUNT(DISTINCT barcode) AS n FROM customer_sessions').get().n,
       ...one(`SELECT COUNT(*) AS entries, COALESCE(SUM(amount),0) AS entry_amount, COUNT(DISTINCT barcode) AS unique_visitors FROM visits WHERE ${W}`),
       ...one(`SELECT COUNT(*) AS plays, COALESCE(SUM(points),0) AS points_won, COUNT(DISTINCT barcode) AS unique_players FROM plays WHERE ${W}`),
       ...one(`SELECT COUNT(*) AS purchases, COALESCE(SUM(total),0) AS points_spent FROM purchases WHERE ${W}`),
@@ -564,7 +652,7 @@ route('GET', '/api/export/:kind', ({ params, query }) => {
           (SELECT COUNT(*) FROM purchases u WHERE u.barcode=c.barcode AND u.voided=0) AS purchases
         FROM cards c ORDER BY barcode`).all();
       for (const r of rows) r.balance = balance(r.barcode);
-      cols = [['barcode', 'Баркод'], ['name', 'Име'], ['phone', 'Телефон'], ['age', 'Възраст'], ['note', 'Бележка'], ['visits', 'Брой входове'], ['entry_paid', 'Платено за вход (€)'], ['plays', 'Брой игри'], ['purchases', 'Брой покупки'], ['balance', 'Баланс точки'], ['blocked', 'Блокирана']];
+      cols = [['barcode', 'Баркод'], ['name', 'Име'], ['phone', 'Телефон'], ['age', 'Възраст'], ['note', 'Бележка'], ['visits', 'Брой входове'], ['entry_paid', 'Платено за вход (€)'], ['plays', 'Брой игри'], ['purchases', 'Брой покупки'], ['balance', 'Баланс точки'], ['blocked', 'Блокирана'], ['kind', 'Вид'], ['linked_to', 'Свързана с']];
       break;
     case 'stays':
       rows = stays(a, b).map((r) => ({
@@ -642,6 +730,12 @@ const handler = async (req, res) => {
 };
 const server = http.createServer(handler);
 
+// ---------- Клиентско приложение (отделен порт) ----------
+const publicHandler = require('./customer').createPublicHandler({
+  db, HttpError, normCode, resolveCode, str, int, getSettings, cardSummary, today, now, readBody, stays, publicDir: PUBLIC_DIR,
+});
+const publicServer = http.createServer(publicHandler);
+
 function startHttps() {
   if (!HTTPS_PORT) return Promise.resolve(null);
   let creds;
@@ -675,10 +769,20 @@ if (require.main === module) {
       for (const ip of lan) console.log(`   В мрежата:  https://${ip}:${httpsActive}`);
       console.log('   (първия път браузърът показва предупреждение – изберете „Продължи“)\n');
     }
+    if (PUBLIC_PORT) {
+      await new Promise((resolve) => {
+        publicServer.on('error', (e) => { console.log(`   ⚠  клиентското приложение не може да стартира на порт ${PUBLIC_PORT}: ${e.message}`); resolve(); });
+        publicServer.listen(PUBLIC_PORT, '0.0.0.0', resolve);
+      });
+      const pub = getSettings().public_url;
+      console.log(`   📱 Клиентско приложение (телефоните на посетителите): порт ${PUBLIC_PORT}`);
+      console.log(pub ? `      Публичен адрес: ${pub}/app` : `      В мрежата: http://${lan[0] || 'localhost'}:${PUBLIC_PORT}/app  (за мобилен интернет – вижте README „Клиентско приложение“)`);
+      console.log('      ⚠  Към интернет пускайте САМО този порт, не порт ' + PORT + '.');
+    }
     console.log(`   Резервни копия: ${backup.status().effective_dir} (на всеки ${backup.status().interval} мин.)`);
     if (!ADMIN_PIN) console.log('   ⚠  ADMIN_PIN не е зададен – администрацията е без парола.');
     console.log('');
   });
 }
 
-module.exports = { server };
+module.exports = { server, publicServer };

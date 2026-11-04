@@ -1,0 +1,378 @@
+<!doctype html>
+<html lang="bg">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="theme-color" content="#0f1226">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="Лунапарк">
+<link rel="manifest" href="/manifest.webmanifest">
+<link rel="apple-touch-icon" href="/icons/apple-touch-icon.png">
+<link rel="icon" href="/icons/icon-192.png">
+<title>Лунапарк</title>
+<link rel="stylesheet" href="/style.css">
+<style>
+  html, body { overscroll-behavior: none; }
+  body { padding-bottom: calc(76px + env(safe-area-inset-bottom)); }
+  header.app { position: sticky; top: 0; z-index: 10; display: flex; align-items: center; gap: 10px;
+    padding: calc(10px + env(safe-area-inset-top)) 16px 10px; background: linear-gradient(90deg, #22285a, #3a1f5d); border-bottom: 1px solid var(--line); }
+  header.app h1 { margin: 0; font-size: 1.15em; flex: 1; }
+  main.c { max-width: 560px; margin: 0 auto; padding: 14px; }
+  .chips { display: flex; gap: 8px; overflow-x: auto; padding-bottom: 6px; }
+  .chip { flex: none; padding: 7px 14px; border-radius: 999px; background: var(--bg2); border: 1px solid var(--line); font-weight: 600; }
+  .chip.active { background: var(--accent); color: #222; border-color: var(--accent); }
+  .tabs-bottom { position: fixed; left: 0; right: 0; bottom: 0; z-index: 20; display: flex; background: #121633; border-top: 1px solid var(--line);
+    padding-bottom: env(safe-area-inset-bottom); }
+  .tabs-bottom button { flex: 1; background: none; border-radius: 0; padding: 10px 4px 8px; display: flex; flex-direction: column; gap: 2px; color: var(--muted); font-size: .75em; font-weight: 600; }
+  .tabs-bottom button span { font-size: 1.6em; }
+  .tabs-bottom button.active { color: var(--accent); }
+  .pass { background: #fff; color: #111; border-radius: 18px; padding: 16px; text-align: center; }
+  .pass svg.bc { width: 100%; height: 90px; }
+  .pass .qr svg { width: 170px; height: 170px; }
+  .pass .num { font: 800 1.6em/1 ui-monospace, monospace; letter-spacing: 3px; margin-top: 6px; }
+  .pass .who { font-weight: 700; color: #333; margin-bottom: 8px; }
+  .pts { font-size: 64px; font-weight: 900; color: var(--accent); line-height: 1; }
+  .li { display: flex; justify-content: space-between; gap: 10px; padding: 9px 0; border-bottom: 1px solid var(--line); }
+  .li:last-child { border-bottom: 0; }
+  .menu-item { display: flex; justify-content: space-between; padding: 9px 0; border-bottom: 1px solid var(--line); }
+  .menu-item.no { opacity: .45; }
+  .big-btn { width: 100%; font-size: 1.15em; padding: 15px; }
+  .seg { display: flex; background: var(--bg2); border-radius: 12px; padding: 4px; gap: 4px; }
+  .seg button { flex: 1; background: none; padding: 10px; }
+  .seg button.active { background: var(--accent); color: #222; }
+  .offline { background: rgba(255,183,3,.15); color: var(--warn); border-radius: 10px; padding: 8px 12px; font-size: .9em; margin-bottom: 10px; }
+  #camPanel { left: 8px !important; right: 8px !important; width: auto !important; bottom: calc(84px + env(safe-area-inset-bottom)) !important; top: auto !important; }
+  .page { display: none; } .page.on { display: block; }
+</style>
+</head>
+<body>
+<header class="app"><span style="font-size:1.5em">🎡</span><h1 id="park">Лунапарк</h1><button class="ghost sm hidden" id="installBtn">⬇ Инсталирай</button></header>
+
+<main class="c">
+  <div id="offline" class="offline hidden">📴 Няма интернет – показвам последните данни. Картата ви работи и офлайн.</div>
+  <div class="chips" id="chips"></div>
+
+  <!-- ===== Начало: регистрация или вход ===== -->
+  <section id="welcome" class="page">
+    <div class="panel center" style="margin-top:6px">
+      <div style="font-size:56px">🎟️</div>
+      <h2 style="margin-bottom:6px">Добре дошли!</h2>
+      <p class="muted" style="margin-top:0">Картата ви за лунапарка – в телефона.</p>
+      <div class="seg" style="margin:14px 0">
+        <button class="active" data-mode="new">Нов съм</button>
+        <button data-mode="have">Имам карта</button>
+      </div>
+
+      <form id="regForm" style="text-align:left" autocomplete="on">
+        <label for="rName">Име и фамилия</label><input id="rName" autocomplete="name" maxlength="200" required>
+        <label for="rPhone">Телефон</label><input id="rPhone" autocomplete="tel" inputmode="tel" maxlength="40" required placeholder="0888 123 456">
+        <label for="rAge">Възраст (по желание)</label><input id="rAge" type="number" min="0" max="120" inputmode="numeric">
+        <label style="display:flex; gap:8px; align-items:flex-start; color:var(--text); margin-top:12px">
+          <input type="checkbox" id="rConsent" style="width:auto; margin-top:3px">
+          <span class="small">Съгласен/съгласна съм данните ми да се използват от лунапарка за картата ми и за статистика.</span></label>
+        <button class="primary big-btn" type="submit" style="margin-top:14px">Създай моята карта</button>
+        <p class="muted small">Ще получите виртуална карта в телефона. На касата плащате входа, като покажете телефона, и получавате и резервна физическа карта – ако батерията падне.</p>
+      </form>
+
+      <div id="haveBox" class="hidden" style="text-align:left">
+        <p class="muted small">Сканирайте баркода на картата си (📷) или въведете номера ѝ.</p>
+        <div class="scan"><span class="icon">▥</span><input id="code" placeholder="напр. LP0001" autocomplete="off" autocapitalize="characters"></div>
+        <div id="phoneBox" class="hidden" style="margin-top:12px">
+          <label for="phone4">Последните 4 цифри от телефона, записан към картата</label>
+          <input id="phone4" inputmode="numeric" maxlength="4" placeholder="••••" style="font-size:1.4em; letter-spacing:6px; text-align:center">
+        </div>
+        <button class="primary big-btn" id="loginBtn" style="margin-top:14px">Добави картата</button>
+        <p class="muted small">Може да добавите картите на цялото семейство.</p>
+      </div>
+    </div>
+  </section>
+
+  <!-- ===== Карта ===== -->
+  <section id="p-card" class="page">
+    <div class="pass">
+      <div class="who" id="who"></div>
+      <svg class="bc" id="bc"></svg>
+      <div class="num" id="num"></div>
+      <div class="qr" id="qr" style="margin-top:10px"></div>
+      <div class="small" style="color:#666; margin-top:6px">Покажете на служителя за сканиране · увеличете яркостта на екрана</div>
+    </div>
+    <div class="panel center" style="margin-top:12px">
+      <div class="pts" id="balance">0</div><div class="muted">точки</div>
+      <div id="games" style="font-size:1.4em; font-weight:800; margin-top:8px"></div>
+      <div class="muted small" id="todayInfo" style="margin-top:6px"></div>
+      <div id="alert" style="margin-top:8px"></div>
+    </div>
+    <div class="panel" style="margin-top:12px" id="backupBox"></div>
+    <div id="protect" class="panel hidden" style="margin-top:12px; border-color:var(--warn)">
+      <b>🔒 Защитете картата си</b>
+      <p class="muted small">Попълнете името и телефона си в „Профил“ – после картата ще може да се добави само с последните 4 цифри от вашия телефон.</p>
+    </div>
+  </section>
+
+  <!-- ===== История ===== -->
+  <section id="p-hist" class="page">
+    <div class="panel"><h3>🎯 Днес</h3><div id="todayPlays"></div><div id="todayBuys" style="margin-top:8px"></div></div>
+    <div class="panel" style="margin-top:12px"><h3>📜 Цялата история</h3><div id="history"></div></div>
+  </section>
+
+  <!-- ===== Меню ===== -->
+  <section id="p-menu" class="page">
+    <div class="panel"><h3>🍿 Какво мога да си взема</h3><p class="muted small" style="margin-top:-6px">С ✓ е отбелязано това, за което имате достатъчно точки.</p><div id="menu"></div></div>
+    <div class="panel" style="margin-top:12px"><h3>🎡 Игри</h3><div id="gameList"></div></div>
+  </section>
+
+  <!-- ===== Профил ===== -->
+  <section id="p-me" class="page">
+    <div class="panel">
+      <h3>👤 Моите данни</h3>
+      <form id="meForm" autocomplete="on">
+        <label for="mName">Име и фамилия</label><input id="mName" autocomplete="name" maxlength="200">
+        <label for="mPhone">Телефон</label><input id="mPhone" autocomplete="tel" inputmode="tel" maxlength="40">
+        <label for="mAge">Възраст</label><input id="mAge" type="number" min="0" max="120" inputmode="numeric">
+        <button class="primary big-btn" type="submit" style="margin-top:14px">💾 Изпрати данните</button>
+      </form>
+    </div>
+    <div class="panel" style="margin-top:12px">
+      <h3>📱 Приложението</h3>
+      <p class="muted small" id="installHint"></p>
+      <button class="ghost" id="addCardBtn" style="width:100%">+ Добави още една карта</button>
+      <button class="ghost" id="removeCard" style="width:100%; margin-top:8px">Премахни тази карта от телефона</button>
+    </div>
+  </section>
+</main>
+
+<nav class="tabs-bottom hidden" id="tabs">
+  <button data-tab="p-card" class="active"><span>💳</span>Карта</button>
+  <button data-tab="p-hist"><span>📜</span>История</button>
+  <button data-tab="p-menu"><span>🍿</span>Меню</button>
+  <button data-tab="p-me"><span>👤</span>Профил</button>
+</nav>
+
+<div id="toast"></div>
+<script src="/code128.js"></script>
+<script src="/vendor/qrcode.js"></script>
+<script src="/camera.js"></script>
+<script>
+'use strict';
+const $ = (s) => document.querySelector(s);
+const $$ = (s) => [...document.querySelectorAll(s)];
+const esc = (s) => String(s ?? '').replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+const fmtTime = (ts) => (ts ? ts.slice(11, 16) : '');
+const fmtDate = (ts) => { if (!ts) return ''; const [y, m, d] = ts.slice(0, 10).split('-'); return `${d}.${m}.${y}`; };
+const fmtDur = (m) => (m == null ? '' : m >= 60 ? `${Math.floor(m / 60)} ч ${String(m % 60).padStart(2, '0')} мин` : `${m} мин`);
+let toastT;
+function toast(msg, type = 'info', ms = 3000) {
+  const t = $('#toast'); t.textContent = msg; t.className = 'show ' + type;
+  clearTimeout(toastT); toastT = setTimeout(() => { t.className = type; }, ms);
+}
+
+// ---- локално хранилище: картите в този телефон и последните им данни (за офлайн) ----
+const LS = {
+  get(k, d) { try { const v = localStorage.getItem(k); return v === null ? d : JSON.parse(v); } catch { return d; } },
+  set(k, v) { try { localStorage.setItem(k, JSON.stringify(v)); } catch { /* ignore */ } },
+};
+const cards = () => LS.get('lp_cards', []);
+const saveCards = (l) => LS.set('lp_cards', l);
+let info = LS.get('lp_info', { games: [], products: [], currency: '€', park_name: 'Лунапарк' });
+let current = null;
+
+async function call(method, url, body, token) {
+  const h = { 'Content-Type': 'application/json' };
+  if (token) h['x-customer-token'] = token;
+  let res;
+  try { res = await fetch(url, { method, headers: h, body: body ? JSON.stringify(body) : undefined, cache: 'no-store' }); }
+  catch { throw Object.assign(new Error('Няма връзка с лунапарка. Проверете интернета.'), { status: 0 }); }
+  const data = await res.json().catch(() => ({}));
+  if (!res.ok) throw Object.assign(new Error(data.error || 'Грешка'), { status: res.status });
+  return data;
+}
+
+// ---- навигация ----
+function page(id) {
+  $$('.page').forEach((p) => p.classList.toggle('on', p.id === id));
+  $$('#tabs button').forEach((b) => b.classList.toggle('active', b.dataset.tab === id));
+  window.scrollTo(0, 0);
+}
+$$('#tabs button').forEach((b) => b.addEventListener('click', () => page(b.dataset.tab)));
+function showWelcome() {
+  current = null;
+  $('#tabs').classList.add('hidden');
+  renderChips();
+  page('welcome');
+}
+$$('[data-mode]').forEach((b) => b.addEventListener('click', () => {
+  $$('[data-mode]').forEach((x) => x.classList.toggle('active', x === b));
+  $('#regForm').classList.toggle('hidden', b.dataset.mode !== 'new');
+  $('#haveBox').classList.toggle('hidden', b.dataset.mode !== 'have');
+}));
+
+function renderChips() {
+  const list = cards();
+  $('#chips').innerHTML = list.length > 1 || (list.length && !current)
+    ? list.map((c) => `<button class="chip ${current && c.barcode === current.barcode ? 'active' : ''}" data-b="${esc(c.barcode)}">${esc(c.label || c.barcode)}</button>`).join('')
+    : '';
+  $$('[data-b]').forEach((b) => b.addEventListener('click', () => openCard(b.dataset.b)));
+}
+
+function remember(token, view) {
+  const list = cards().filter((c) => c.barcode !== view.barcode && c.token !== token);
+  list.push({ token, barcode: view.barcode, label: view.first_name || view.barcode, view });
+  saveCards(list);
+  LS.set('lp_active', view.barcode);
+}
+
+// ---- регистрация (виртуален потребител) ----
+$('#regForm').addEventListener('submit', async (e) => {
+  e.preventDefault();
+  try {
+    const r = await call('POST', '/api/public/register', {
+      name: $('#rName').value, phone: $('#rPhone').value, age: $('#rAge').value, consent: $('#rConsent').checked,
+    });
+    remember(r.token, r.card);
+    current = cards().find((c) => c.barcode === r.card.barcode);
+    toast('Картата ви е създадена! 🎉', 'ok', 4000);
+    show(r.card);
+  } catch (err) { toast(err.message, 'bad', 5000); }
+});
+
+// ---- вход с напечатана карта ----
+async function login(code) {
+  code = String(code || $('#code').value).trim().toUpperCase();
+  if (!code) { toast('Въведете номера на картата', 'bad'); return; }
+  $('#code').value = code;
+  const phone4 = $('#phoneBox').classList.contains('hidden') ? undefined : $('#phone4').value;
+  try {
+    const r = await call('POST', '/api/public/login', { barcode: code, phone4 });
+    if (r.need_phone) { $('#phoneBox').classList.remove('hidden'); $('#phone4').focus(); toast('Въведете последните 4 цифри от телефона', 'info'); return; }
+    remember(r.token, r.card);
+    current = cards().find((c) => c.barcode === r.card.barcode);
+    $('#phoneBox').classList.add('hidden'); $('#code').value = ''; $('#phone4').value = '';
+    show(r.card);
+  } catch (err) { toast(err.message, 'bad', 5000); }
+}
+$('#loginBtn').addEventListener('click', () => login());
+$('#code').addEventListener('keydown', (e) => { if (e.key === 'Enter') { e.preventDefault(); login(); } });
+$('#phone4').addEventListener('keydown', (e) => { if (e.key === 'Enter') { e.preventDefault(); login(); } });
+CameraScanner.attach($('#code'), (c) => login(c), { keepOpen: false, facing: 'environment' });
+
+// ---- показване на карта ----
+async function openCard(barcode) {
+  const c = cards().find((x) => x.barcode === barcode);
+  if (!c) return showWelcome();
+  current = c;
+  LS.set('lp_active', barcode);
+  if (c.view) show(c.view, true); // веднага от паметта (работи и без интернет)
+  await refresh();
+}
+
+async function refresh() {
+  if (!current) return;
+  try {
+    const v = await call('GET', '/api/public/me', null, current.token);
+    $('#offline').classList.add('hidden');
+    show(v);
+  } catch (e) {
+    if (e.status === 401) {
+      saveCards(cards().filter((c) => c.token !== current.token));
+      toast('Картата трябва да се добави отново', 'bad', 5000);
+      const n = cards()[0]; return n ? openCard(n.barcode) : showWelcome();
+    }
+    if (e.status === 0) $('#offline').classList.remove('hidden');
+  }
+}
+
+let shownCode = null;
+function show(v, fromCache) {
+  // запазваме последните данни (за офлайн) и проследяваме смяна на карта
+  const list = cards().map((c) => (c.token === current.token ? { ...c, barcode: v.barcode, label: v.first_name || v.barcode, view: v } : c));
+  saveCards(list);
+  current = list.find((c) => c.token === current.token);
+  $('#tabs').classList.remove('hidden');
+  renderChips();
+  if (!$$('.page.on').length || $('#welcome').classList.contains('on')) page('p-card');
+
+  $('#who').textContent = v.first_name ? `${v.first_name} · ${v.kind === 'virtual' ? 'виртуална карта' : 'карта'}` : (v.kind === 'virtual' ? 'Виртуална карта' : 'Карта');
+  if (shownCode !== v.barcode) {
+    shownCode = v.barcode;
+    $('#bc').outerHTML = code128Svg(v.barcode, { module: 3, height: 90, quiet: 10 }).replace('<svg ', '<svg class="bc" id="bc" preserveAspectRatio="none" ');
+    const q = qrcode(0, 'M'); q.addData(v.barcode); q.make();
+    $('#qr').innerHTML = q.createSvgTag({ cellSize: 6, margin: 2, scalable: true });
+  }
+  $('#num').textContent = v.barcode;
+  $('#balance').textContent = Number(v.balance).toLocaleString('bg-BG');
+  const g = v.games;
+  $('#games').innerHTML = g && g.limited
+    ? `🎯 Остават игри: <span style="color:${g.remaining === 0 ? 'var(--bad)' : g.remaining <= 2 ? 'var(--warn)' : 'var(--ok)'}">${g.remaining}</span> <span class="muted" style="font-size:.6em">от ${g.allowed}</span>` : '';
+  $('#todayInfo').textContent = v.today.arrived ? `Днес в парка от ${fmtTime(v.today.arrived)}${v.today.minutes ? ' · ' + fmtDur(v.today.minutes) : ''}` : 'Днес още нямате платен вход – покажете картата на касата';
+  $('#alert').innerHTML = v.blocked ? '<span class="badge bad">Картата е блокирана – обърнете се към касата</span>'
+    : g && g.limited && g.remaining === 0 && g.allowed > 0 ? '<span class="badge warn">Изиграхте всички игри – за още игри платете нов вход</span>' : '';
+  $('#backupBox').innerHTML = v.linked && v.linked.length
+    ? `<b>💳 Резервна физическа карта:</b> ${v.linked.map(esc).join(', ')}<div class="muted small">Ако телефонът ви падне, покажете физическата карта – точките и игрите са общи.</div>`
+    : v.kind === 'virtual'
+      ? '<b>💳 Резервна карта</b><div class="muted small">На касата ще получите и физическа карта, свързана с тази. Ако батерията на телефона падне – покажете нея.</div>'
+      : `<div class="muted small">Това е вашата напечатана карта ${esc(v.barcode)} – може да показвате нея или телефона.</div>`;
+  $('#protect').classList.toggle('hidden', v.has_phone);
+
+  const li = (l, r) => `<div class="li"><span>${l}</span><span>${r}</span></div>`;
+  $('#todayPlays').innerHTML = v.today.plays.map((p) => li(`${fmtTime(p.ts)} · ${esc(p.game_name)}`, `<b class="ok">+${p.points}</b>`)).join('') || '<p class="muted">Още няма игри днес</p>';
+  $('#todayBuys').innerHTML = v.today.purchases.map((p) => li(`${fmtTime(p.ts)} · 🍔 ${p.items.map((i) => `${i.qty}× ${esc(i.name)}`).join(', ')}`, `<b class="bad">−${p.total}</b>`)).join('');
+  $('#history').innerHTML = [
+    ...v.plays.map((p) => ({ ts: p.ts, h: li(`${fmtDate(p.ts)} ${fmtTime(p.ts)} · 🎯 ${esc(p.game_name)}`, `<b class="ok">+${p.points}</b>`) })),
+    ...v.purchases.map((p) => ({ ts: p.ts, h: li(`${fmtDate(p.ts)} ${fmtTime(p.ts)} · 🍔 ${p.items.map((i) => `${i.qty}× ${esc(i.name)}`).join(', ')}`, `<b class="bad">−${p.total}</b>`) })),
+  ].sort((a, b) => b.ts.localeCompare(a.ts)).map((x) => x.h).join('') || '<p class="muted">Няма история</p>';
+  $('#menu').innerHTML = info.products.map((p) => `<div class="menu-item ${p.points > v.balance ? 'no' : ''}"><span>${esc(p.name)} <span class="muted small">${esc(p.category)}</span></span><b>${p.points} т. ${p.points <= v.balance ? '✓' : ''}</b></div>`).join('') || '<p class="muted">Няма продукти</p>';
+  $('#gameList').innerHTML = info.games.map((x) => li(esc(x.name), `до ${x.points} т.`)).join('') || '<p class="muted">Няма игри</p>';
+  if (!document.activeElement || !document.activeElement.closest('#meForm')) {
+    $('#mName').value = v.name || ''; $('#mPhone').value = ''; $('#mPhone').placeholder = v.phone_masked ? `записан: ${v.phone_masked}` : '0888 123 456'; $('#mAge').value = v.age ?? '';
+  }
+}
+
+$('#meForm').addEventListener('submit', async (e) => {
+  e.preventDefault();
+  if (!current) return;
+  const phone = $('#mPhone').value;
+  if (!phone && current.view && current.view.has_phone) { toast('Въведете телефона отново, за да потвърдите промяната', 'info', 4000); $('#mPhone').focus(); return; }
+  try {
+    const v = await call('PUT', '/api/public/me', { name: $('#mName').value, phone, age: $('#mAge').value }, current.token);
+    document.activeElement.blur();
+    toast('Данните са изпратени ✔', 'ok');
+    show(v);
+  } catch (err) { toast(err.message, 'bad', 5000); }
+});
+$('#addCardBtn').addEventListener('click', showWelcome);
+$('#removeCard').addEventListener('click', async () => {
+  if (!current || !confirm('Да премахна ли тази карта от телефона? Може да я добавите отново с номера ѝ.')) return;
+  try { await call('POST', '/api/public/logout', {}, current.token); } catch { /* ignore */ }
+  saveCards(cards().filter((c) => c.token !== current.token));
+  const n = cards()[0]; if (n) openCard(n.barcode); else showWelcome();
+});
+
+// ---- инсталиране като приложение ----
+let installEvt = null;
+const standalone = matchMedia('(display-mode: standalone)').matches || navigator.standalone;
+const iOS = /iphone|ipad|ipod/i.test(navigator.userAgent);
+$('#installHint').textContent = standalone ? '✔ Приложението е инсталирано.'
+  : iOS ? 'Инсталиране на iPhone/iPad: натиснете „Сподели“ (квадратче със стрелка) → „Добави към началния екран“.'
+    : 'Инсталиране: натиснете „⬇ Инсталирай“ горе или от менюто на браузъра изберете „Инсталирай приложението“.';
+addEventListener('beforeinstallprompt', (e) => { e.preventDefault(); installEvt = e; $('#installBtn').classList.remove('hidden'); });
+$('#installBtn').addEventListener('click', async () => { if (!installEvt) return; installEvt.prompt(); await installEvt.userChoice; installEvt = null; $('#installBtn').classList.add('hidden'); });
+if ('serviceWorker' in navigator && (location.protocol === 'https:' || location.hostname === 'localhost')) {
+  navigator.serviceWorker.register('/sw.js').catch(() => {});
+}
+addEventListener('online', refresh);
+addEventListener('offline', () => $('#offline').classList.remove('hidden'));
+
+(async () => {
+  $('#park').textContent = info.park_name;
+  call('GET', '/api/public/info').then((i) => { info = i; LS.set('lp_info', i); $('#park').textContent = i.park_name; document.title = i.park_name; if (current && current.view) show(current.view, true); }).catch(() => {});
+  const list = cards();
+  const a = LS.get('lp_active', null);
+  if (list.length) openCard(list.some((c) => c.barcode === a) ? a : list[0].barcode); else showWelcome();
+  setInterval(() => { if (!document.hidden && current) refresh(); }, 15000);
+  document.addEventListener('visibilitychange', () => { if (!document.hidden && current) refresh(); });
+})();
+</script>
+</body>
+</html>

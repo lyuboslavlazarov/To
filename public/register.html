@@ -50,6 +50,7 @@
         <div class="stat"><div class="v" id="sGames">—</div><div class="l">Оставащи игри</div></div>
       </div>
       <p class="muted small" id="lastVisit"></p>
+      <div id="linkBox" class="row" style="margin:6px 0 4px"></div>
 
       <div class="grid2">
         <div>
@@ -131,6 +132,7 @@ function updateButtons() {
 }
 
 function fillForm(card, code) {
+  if (card && card.barcode) code = card.barcode; // физическа карта, свързана към профил -> профилът
   current = code;
   currentCard = card;
   $('#empty').classList.add('hidden');
@@ -154,6 +156,17 @@ function fillForm(card, code) {
   else if (enteredNow) b = '<span class="badge ok">ВХОДЪТ Е ЗАПИСАН</span>';
   else if (c.entered_today) b = '<span class="badge warn">ВЕЧЕ Е ВЛЯЗЪЛ ДНЕС</span>';
   $('#statusBadge').innerHTML = b;
+  // вид на потребителя и свързани физически карти
+  if (card) {
+    const kind = c.kind === 'virtual' ? '<span class="badge" style="background:#3a1f5d">📱 Приложение (виртуална карта)</span>' : '<span class="badge">💳 Напечатана карта</span>';
+    const linked = (c.linked || []).length ? `<span class="small">Физическа карта: <b>${c.linked.map(esc).join(', ')}</b></span>` : '';
+    const btn = c.blocked ? '' : `<button type="button" class="${c.kind === 'virtual' && !(c.linked || []).length ? 'primary' : 'ghost'} sm" id="linkBtn">🔗 ${c.kind === 'virtual' ? 'Дай резервна физическа карта' : 'Свържи още една карта'}</button>`;
+    $('#linkBox').innerHTML = kind + linked + '<span class="grow"></span>' + btn;
+    const lb = $('#linkBtn');
+    if (lb) lb.addEventListener('click', () => openLinkCard(code, { onDone: (cardNew) => { currentCard = cardNew; fillFormKeep(cardNew); } }));
+  } else {
+    $('#linkBox').innerHTML = '';
+  }
   updateButtons();
   // курсорът отива в „Име“ само ако името липсва
   if (!c.name) $('#name').focus(); else $('#scan').focus();

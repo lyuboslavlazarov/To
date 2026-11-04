@@ -115,6 +115,25 @@ CREATE INDEX IF NOT EXISTS idx_repl_old ON card_replacements(old_barcode);
 `);
 
 // Миграция на по-стари бази: колона „заменена с“
+// Телефони (клиентското приложение), свързани с карта
+db.exec(`CREATE TABLE IF NOT EXISTS customer_sessions (
+  token_hash TEXT PRIMARY KEY,
+  barcode    TEXT NOT NULL,
+  created_at INTEGER NOT NULL,
+  last_seen  INTEGER NOT NULL,
+  user_agent TEXT NOT NULL DEFAULT ''
+);
+CREATE INDEX IF NOT EXISTS idx_cs_barcode ON customer_sessions(barcode);`);
+
+// Вид на потребителя: 'card' – напечатана карта, 'virtual' – регистриран в приложението (виртуална карта)
+if (!db.prepare("SELECT 1 FROM pragma_table_info('cards') WHERE name='kind'").get()) {
+  db.exec("ALTER TABLE cards ADD COLUMN kind TEXT NOT NULL DEFAULT 'card'");
+}
+// Физическа карта, свързана към профил (напр. резервна карта на виртуален потребител)
+if (!db.prepare("SELECT 1 FROM pragma_table_info('cards') WHERE name='linked_to'").get()) {
+  db.exec('ALTER TABLE cards ADD COLUMN linked_to TEXT');
+}
+db.exec('CREATE INDEX IF NOT EXISTS idx_cards_linked ON cards(linked_to)');
 if (!db.prepare("SELECT 1 FROM pragma_table_info('cards') WHERE name='replaced_by'").get()) {
   db.exec('ALTER TABLE cards ADD COLUMN replaced_by TEXT');
 }

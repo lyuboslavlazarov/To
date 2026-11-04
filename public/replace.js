@@ -132,3 +132,47 @@ function openReplaceCard({ preselect = null, onDone = null } = {}) {
 
   if (preselect) pick(preselect); else stepSearch();
 }
+
+/*
+ * Свързване на физическа карта към профил (напр. резервна карта за виртуален потребител
+ * от приложението). Сканира се физическата карта – после и тя, и телефонът водят към
+ * едни и същи точки, игри и история.
+ */
+function openLinkCard(mainCode, { onDone = null } = {}) {
+  document.querySelectorAll('.modal-bg').forEach((m) => m.remove());
+  const bg = document.createElement('div');
+  bg.className = 'modal-bg';
+  bg.innerHTML = `<div class="modal" style="width:min(560px,100%)">
+    <div class="row"><h2 class="grow" style="margin:0">🔗 Физическа карта към ${esc(mainCode)}</h2><button class="ghost" data-close>✕</button></div>
+    <p class="muted">Дайте на посетителя неизползвана карта и я сканирайте. Ако телефонът му падне, ще може да ползва нея – точките и игрите са общи.</p>
+    <div class="scan" data-own-scan><span class="icon">▥</span><input data-phys placeholder="Сканирайте физическата карта…" autocomplete="off"></div>
+    <div data-msg style="margin-top:12px"></div></div>`;
+  document.body.appendChild(bg);
+  let cam = null;
+  const close = () => { if (cam) cam.close(); bg.remove(); };
+  bg.addEventListener('click', (e) => { if (e.target === bg || e.target.hasAttribute('data-close')) close(); });
+  bg.addEventListener('keydown', (e) => { if (e.key === 'Escape') { e.stopPropagation(); close(); } });
+  const input = bg.querySelector('[data-phys]');
+  const doLink = async (code) => {
+    code = String(code || '').trim().toUpperCase();
+    if (!code) return;
+    input.value = code;
+    try {
+      const card = await api('POST', `/api/cards/${encodeURIComponent(mainCode)}/link`, { card: code });
+      beep(true);
+      if (cam) cam.close();
+      bg.querySelector('.modal').innerHTML = `<div class="result ok center"><div class="huge ok">✔</div>
+        <div class="big">Картата ${esc(code)} е свързана с ${esc(mainCode)}</div>
+        <p>${esc(card.name || 'Без име')} · ${pts(card.balance)} · оставащи игри: ${gamesLeft(card.games)}</p>
+        <button class="primary" data-close>Готово</button></div>`;
+      if (onDone) onDone(card, code);
+    } catch (e) {
+      beep(false);
+      bg.querySelector('[data-msg]').innerHTML = `<div class="result bad">✖ ${esc(e.message)}</div>`;
+      input.value = '';
+    }
+  };
+  input.addEventListener('keydown', (e) => { if (e.key === 'Enter') { e.preventDefault(); doLink(input.value); } });
+  if (typeof CameraScanner !== 'undefined') cam = CameraScanner.attach(input, doLink, { secondary: true });
+  input.focus();
+}

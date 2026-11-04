@@ -240,3 +240,95 @@ test('престой в парка: пристигане, тръгване, пр
   const c = (await call('GET', `/api/export/stays?from=${D}&to=${D}`)).data;
   assert.match(c, /LP0200;Стоян;10:05;12:50;последна покупка;2:45;165/);
 });
+
+test('клиентско приложение: виртуален потребител, физическа карта, вход, сигурност', async () => {
+  const { publicServer } = require('../server');
+  await new Promise((r) => publicServer.listen(0, r));
+  const P = `http://127.0.0.1:${publicServer.address().port}`;
+  const pub = async (method, url, body, token) => {
+    const h = { 'Content-Type': 'application/json' };
+    if (token) h['x-customer-token'] = token;
+    const res = await fetch(P + url, { method, headers: h, body: body ? JSON.stringify(body) : undefined });
+    const ct = res.headers.get('content-type') || '';
+    return { status: res.status, data: ct.includes('json') ? await res.json() : await res.text() };
+  };
+  try {
+    // персоналните екрани и API не са достъпни през публичния порт
+    assert.equal((await pub('GET', '/api/cards')).status, 404);
+    assert.equal((await pub('POST', '/api/plays', { barcode: 'LP0001', game_id: 1 })).status, 404);
+    assert.equal((await pub('GET', '/admin.html')).status, 404);
+    assert.equal((await pub('GET', '/game.html')).status, 404);
+    assert.equal((await pub('GET', '/app')).status, 200);
+    assert.equal((await pub('GET', '/manifest.webmanifest')).status, 200);
+
+    // регистрация в приложението -> виртуална карта
+    let r = await pub('POST', '/api/public/register', { name: 'Нина Петкова', phone: '0888 123 456', age: 9 });
+    assert.equal(r.status, 400, 'без съгласие');
+    r = await pub('POST', '/api/public/register', { name: 'Нина Петкова', phone: '0888 123 456', age: 9, consent: true });
+    assert.equal(r.status, 200);
+    const token = r.data.token;
+    const V = r.data.card.barcode;
+    assert.match(V, /^V\d{6}$/);
+    assert.equal(r.data.card.kind, 'virtual');
+
+    // на касата: вход с телефона (виртуалната карта), после резервна физическа карта
+    await call('POST', '/api/entry', { barcode: V });
+    let s = await call('POST', `/api/cards/${V}/link`, { card: 'LP0400' });
+    assert.equal(s.status, 200);
+    assert.deepEqual(s.data.linked, ['LP0400']);
+    assert.equal((await call('POST', `/api/cards/${V}/link`, { card: 'LP0001' })).status, 400, 'използвана карта');
+    // игра с телефона и игра с физическата карта -> един и същ профил
+    await call('POST', '/api/plays', { barcode: V, game_id: 1, points: 10 });
+    s = await call('POST', '/api/plays', { barcode: 'LP0400', game_id: 1, points: 5 });
+    assert.equal(s.data.card.barcode, V);
+    assert.equal(s.data.card.balance, 15);
+    assert.equal(s.data.card.games.remaining, 8);
+    assert.equal((await call('GET', '/api/cards/LP0400')).data.barcode, V);
+
+    // приложението вижда всичко
+    r = await pub('GET', '/api/public/me', null, token);
+    assert.equal(r.data.balance, 15);
+    assert.equal(r.data.today.plays.length, 2);
+    assert.deepEqual(r.data.linked, ['LP0400']);
+    assert.equal(r.data.phone_masked, '••• 3456');
+    assert.equal((await pub('GET', '/api/public/me', null, 'bad-token')).status, 401);
+
+    // вход от друг телефон с физическата карта -> иска последните 4 цифри
+    r = await pub('POST', '/api/public/login', { barcode: 'LP0400' });
+    assert.equal(r.data.need_phone, true);
+    r = await pub('POST', '/api/public/login', { barcode: 'LP0400', phone4: '9999' });
+    assert.equal(r.status, 404);
+    r = await pub('POST', '/api/public/login', { barcode: 'LP0400', phone4: '3456' });
+    assert.equal(r.status, 200);
+    assert.equal(r.data.card.barcode, V);
+
+    // напечатана карта без телефон и без вход – не може да се „заеме“
+    r = await pub('POST', '/api/public/login', { barcode: 'LP0410' });
+    assert.equal(r.status, 403);
+    await call('POST', '/api/entry', { barcode: 'LP0410' });
+    r = await pub('POST', '/api/public/login', { barcode: 'LP0410' });
+    assert.equal(r.status, 200);
+    const t2 = r.data.token;
+    // клиентът сам изпраща данните си -> картата се защитава с телефона
+    r = await pub('PUT', '/api/public/me', { name: 'Тодор', phone: '0899 000 777', age: 10 }, t2);
+    assert.equal(r.data.name, 'Тодор');
+    assert.equal((await call('GET', '/api/cards/LP0410')).data.phone, '0899 000 777');
+    r = await pub('POST', '/api/public/login', { barcode: 'LP0410' });
+    assert.equal(r.data.need_phone, true);
+
+    // изгубена физическа карта на виртуален потребител -> нова физическа, профилът остава
+    s = await call('POST', `/api/cards/${V}/replace`, { new_barcode: 'LP0401' });
+    assert.equal(s.status, 200);
+    assert.deepEqual(s.data.card.linked, ['LP0401']);
+    assert.equal(s.data.card.balance, 15);
+    assert.equal((await call('POST', '/api/plays', { barcode: 'LP0400', game_id: 1 })).status, 403, 'старата физическа карта е блокирана');
+    assert.equal((await call('POST', '/api/plays', { barcode: 'LP0401', game_id: 1, points: 1 })).data.card.barcode, V);
+    r = await pub('GET', '/api/public/me', null, token);
+    assert.equal(r.status, 200, 'телефонът продължава да работи');
+    // статистика
+    const st = (await call('GET', '/api/stats')).data.totals;
+    assert.ok(st.virtual_users >= 1 && st.app_users >= 2);
+  } finally {
+    publicServer.close();
+  }
+});

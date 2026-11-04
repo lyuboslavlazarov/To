@@ -127,6 +127,16 @@
         <div style="margin-top:14px"><button class="primary" id="sSave">Запази</button></div>
       </div>
       <div class="panel">
+        <h3>📱 Приложение за клиентите</h3>
+        <p class="muted small">Клиентите сканират QR кода от плаката и инсталират приложението на телефона си. Работи през техния мобилен интернет, ако сървърът е пуснат в интернет (вижте README → „Приложение за клиентите“). Към интернет се пуска само порт <b id="pubPort">3080</b> – там са достъпни само клиентските екрани.</p>
+        <label>Публичен адрес (напр. https://lunapark.tailXXXX.ts.net)</label><input id="sPublic" placeholder="празно = само в Wi-Fi мрежата на парка">
+        <div class="row" style="margin-top:12px">
+          <button class="primary" id="sPubSave">Запази</button>
+          <a class="btn" href="/poster.html" target="_blank">🖨 Плакат с QR код</a>
+          <a class="btn ghost" id="appLink" target="_blank">Отвори приложението ↗</a>
+        </div>
+      </div>
+      <div class="panel">
         <h3>Генериране на карти</h3>
         <p class="muted small">Създава карти с последователни баркодове (напр. LP0001 … LP0600). Съществуващите карти не се променят. Ако вече имате готови баркодове, не е нужно – картата се създава автоматично при първо сканиране на поста за вход.</p>
         <div class="grid2">
@@ -240,6 +250,8 @@ async function loadStats() {
       [pts(t.points_spent), 'Изхарчени точки'],
       [t.purchases, 'Поръчки в зоната за хранене'],
       [t.cards_with_holder + ' / ' + t.cards_total, 'Карти с въведен играч'],
+      [t.virtual_users, '📱 Регистрирани в приложението'],
+      [t.app_users, '📱 Карти, отворени в приложение'],
     ];
     $('#totals').innerHTML = tiles.map(([v, l]) => `<div class="stat"><div class="v">${v}</div><div class="l">${l}</div></div>`).join('');
     const bg = bars(s.byGame, 'plays');
@@ -281,7 +293,7 @@ async function loadCards() {
   try {
     const rows = await api('GET', '/api/cards?limit=5000&q=' + encodeURIComponent(q));
     $('#tCards').innerHTML = rows.map((r) => `<tr data-card="${esc(r.barcode)}" style="cursor:pointer">
-      <td><b>${esc(r.barcode)}</b> ${r.replaced_by ? `<span class="badge bad">заменена → ${esc(r.replaced_by)}</span>` : r.blocked ? '<span class="badge bad">блок.</span>' : ''}</td>
+      <td><b>${esc(r.barcode)}</b> ${r.kind === 'virtual' ? '<span class="badge" style="background:#3a1f5d">📱</span>' : ''} ${r.replaced_by ? `<span class="badge bad">заменена → ${esc(r.replaced_by)}</span>` : r.linked_to ? `<span class="badge">🔗 към ${esc(r.linked_to)}</span>` : r.blocked ? '<span class="badge bad">блок.</span>' : ''}</td>
       <td>${esc(r.name || '—')}</td><td>${esc(r.phone || '')}</td>
       <td>${r.visits}</td><td>${r.plays}</td><td>${r.purchases}</td><td>${r.balance}</td><td>${r.games_left ?? '—'}</td>
       <td>${fmtTs(r.last_visit)}</td></tr>`).join('') || '<tr><td colspan="8" class="muted">Няма карти. Генерирайте ги от „Настройки“.</td></tr>';
@@ -307,9 +319,13 @@ async function openCard(code) {
         <div class="grid2"><div><label>Телефон</label><input id="mPhone" value="${esc(c.phone)}"></div><div><label>Възраст</label><input id="mAge" type="number" value="${c.age ?? ''}"></div></div>
         <label>Бележка</label><input id="mNote" value="${esc(c.note)}">
         <div class="row" style="margin-top:10px"><button class="primary" id="mSave">Запази данните</button>
-        ${c.replaced_by ? '' : `<button class="primary" id="mReplace">🔁 Замени с нова карта</button>`}
+        ${c.replaced_by ? '' : `<button class="primary" id="mReplace">🔁 ${c.kind === 'virtual' ? 'Изгубена физическа карта' : 'Замени с нова карта'}</button>`}
+        ${c.replaced_by ? '' : `<button id="mLink">🔗 Свържи физическа карта</button>`}
         ${c.replaced_by ? '' : `<button class="${c.blocked ? 'ok' : 'danger'}" id="mBlock">${c.blocked ? 'Отблокирай' : 'Блокирай'}</button>`}</div>
         ${c.replaced_by ? `<p class="result bad" style="margin-top:10px">Тази карта е обявена за изгубена и е заменена с <a href="#" data-goto="${esc(c.replaced_by)}"><b>${esc(c.replaced_by)}</b></a>. Историята е прехвърлена там.</p>` : ''}
+        <p class="small" style="margin:10px 0 4px">${c.kind === 'virtual' ? '📱 <b>Регистриран в приложението</b> (виртуална карта)' : '💳 Напечатана карта'}
+          · 📱 свързани телефони: <b>${h.devices}</b> ${h.devices ? '<button class="ghost sm" id="mDevices">Изключи телефоните</button>' : ''}</p>
+        ${(c.linked || []).map((l) => `<p class="small" style="margin:4px 0">🔗 Физическа карта <b>${esc(l)}</b> <button class="ghost sm" data-unlink="${esc(l)}">Развържи</button></p>`).join('')}
         ${h.replacements.filter((x) => x.new_barcode === c.barcode).map((x) => `<p class="muted small">🔁 Заменя изгубена карта <a href="#" data-goto="${esc(x.old_barcode)}">${esc(x.old_barcode)}</a> от ${fmtTs(x.ts)}${x.reason ? ' – ' + esc(x.reason) : ''}</p>`).join('')}
       </div>
       <div>
@@ -364,6 +380,13 @@ async function openCard(code) {
 
   const act = async (fn, msg) => { try { await fn(); toast(msg, 'ok'); openCard(code); refreshActive(); } catch (e) { toast(e.message, 'bad', 4000); } };
   $('#mSave', bg).addEventListener('click', () => act(() => api('PUT', `/api/cards/${encodeURIComponent(code)}`, { name: $('#mName').value, phone: $('#mPhone').value, age: $('#mAge').value, note: $('#mNote').value }), 'Запазено'));
+  const mLink = $('#mLink', bg);
+  if (mLink) mLink.addEventListener('click', () => openLinkCard(c.barcode, { onDone: () => refreshActive() }));
+  $$('[data-unlink]', bg).forEach((b) => b.addEventListener('click', () => confirm(`Да се развърже ли картата ${b.dataset.unlink}?`)
+    && act(() => api('POST', `/api/cards/${encodeURIComponent(c.barcode)}/unlink`, { card: b.dataset.unlink }), 'Развързана')));
+  const mDev = $('#mDevices', bg);
+  if (mDev) mDev.addEventListener('click', () => confirm('Да се изключат ли всички телефони, свързани с тази карта? Ще трябва да я добавят отново.')
+    && act(() => api('POST', `/api/cards/${encodeURIComponent(c.barcode)}/customer-logout`, {}), 'Телефоните са изключени'));
   const mReplace = $('#mReplace', bg);
   if (mReplace) mReplace.addEventListener('click', () => openReplaceCard({ preselect: code, onDone: () => refreshActive() }));
   $$('[data-goto]', bg).forEach((a) => a.addEventListener('click', (e) => { e.preventDefault(); openCard(a.dataset.goto); }));
@@ -434,6 +457,9 @@ async function loadSettingsTab() {
   settings = await api('GET', '/api/settings');
   $('#sName').value = settings.park_name; $('#sFee').value = settings.entry_fee; $('#sCur').value = settings.currency; $('#sPts').value = settings.entry_points;
   $('#sPlays').value = settings.plays_per_entry; $('#sExpire').checked = settings.plays_expire_daily !== '0';
+  $('#sPublic').value = settings.public_url || '';
+  appUrl().then((u) => { $('#appLink').href = u; });
+  api('GET', '/api/ping').then((p) => { $('#pubPort').textContent = p.public_port || '—'; });
   genPreview();
   loadBackup();
 }
@@ -471,6 +497,14 @@ $('#bkNow').addEventListener('click', async () => {
   catch (e) { toast(e.message, 'bad', 6000); loadBackup(); }
 });
 
+$('#sPubSave').addEventListener('click', async () => {
+  try {
+    settings = await api('PUT', '/api/settings', { public_url: $('#sPublic').value });
+    $('#sPublic').value = settings.public_url || '';
+    appUrl().then((u) => { $('#appLink').href = u; });
+    toast('Запазено', 'ok');
+  } catch (e) { toast(e.message, 'bad', 5000); }
+});
 $('#sSave').addEventListener('click', async () => {
   try {
     settings = await api('PUT', '/api/settings', { park_name: $('#sName').value, entry_fee: $('#sFee').value, currency: $('#sCur').value, entry_points: $('#sPts').value, plays_per_entry: $('#sPlays').value, plays_expire_daily: $('#sExpire').checked });

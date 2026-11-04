@@ -154,6 +154,14 @@ function leftText(r) {
   const how = r.left_by === 'purchase' ? 'последна покупка' : 'последна игра';
   return `${fmtTime(r.left)} <span class="muted small">(${how})</span>`;
 }
+/** Адрес на клиентското приложение: публичният (от настройките) или в мрежата на парка */
+async function appUrl() {
+  const [s, p] = await Promise.all([api('GET', '/api/settings'), api('GET', '/api/ping')]);
+  if (s.public_url) return s.public_url.replace(/\/+$/, '') + '/app';
+  // отворено на самия сървър (localhost) – телефоните трябва адреса му в мрежата
+  const host = /^(localhost|127\.|\[?::1)/.test(location.hostname) && p.lan_ip ? p.lan_ip : location.hostname;
+  return `http://${host}:${p.public_port || 3080}/app`;
+}
 function pts(n) { return `${Number(n || 0).toLocaleString('bg-BG')} т.`; }
 function money(n, cur = '€') { return `${Number(n || 0).toLocaleString('bg-BG', { maximumFractionDigits: 2 })} ${cur}`; }
 
