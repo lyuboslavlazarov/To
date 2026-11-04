@@ -46,9 +46,11 @@
   #camPanel { left: 8px !important; right: 8px !important; width: auto !important; bottom: calc(84px + env(safe-area-inset-bottom)) !important; top: auto !important; }
   .page { display: none; } .page.on { display: block; }
 </style>
+<link rel="stylesheet" href="/fonts/fonts.css">
+<link rel="stylesheet" href="/theme/star.css">
 </head>
 <body>
-<header class="app"><span style="font-size:1.5em">🎡</span><h1 id="park">Лунапарк</h1><button class="ghost sm hidden" id="installBtn">⬇ Инсталирай</button></header>
+<header class="hero"><h1 id="park">Лунапарк</h1><button class="ghost sm hidden" id="installBtn">⬇ Инсталирай</button></header>
 
 <main class="c">
   <div id="offline" class="offline hidden">📴 Няма интернет – показвам последните данни. Картата ви работи и офлайн.</div>
@@ -92,6 +94,7 @@
 
   <!-- ===== Карта ===== -->
   <section id="p-card" class="page">
+    <div class="hello" id="hello"></div>
     <div class="pass">
       <div class="who" id="who"></div>
       <svg class="bc" id="bc"></svg>
@@ -99,12 +102,13 @@
       <div class="qr" id="qr" style="margin-top:10px"></div>
       <div class="small" style="color:#666; margin-top:6px">Покажете на служителя за сканиране · увеличете яркостта на екрана</div>
     </div>
-    <div class="panel center" style="margin-top:12px">
-      <div class="pts" id="balance">0</div><div class="muted">точки</div>
-      <div id="games" style="font-size:1.4em; font-weight:800; margin-top:8px"></div>
-      <div class="muted small" id="todayInfo" style="margin-top:6px"></div>
+    <div class="panel score" style="margin-top:12px">
+      <div class="pts" id="balance">0</div><div class="pts-l">ТОЧКИ</div>
+      <div id="games"></div>
+      <div class="muted small" id="todayInfo" style="margin-top:8px"></div>
       <div id="alert" style="margin-top:8px"></div>
     </div>
+    <div class="velvet hidden" id="todayProg"><div class="ribbon">Очакват ви днес</div><div id="todayProgList"></div></div>
     <div class="panel" style="margin-top:12px" id="backupBox"></div>
     <div id="protect" class="panel hidden" style="margin-top:12px; border-color:var(--warn)">
       <b>🔒 Защитете картата си</b>
@@ -116,6 +120,11 @@
   <section id="p-hist" class="page">
     <div class="panel"><h3>🎯 Днес</h3><div id="todayPlays"></div><div id="todayBuys" style="margin-top:8px"></div></div>
     <div class="panel" style="margin-top:12px"><h3>📜 Цялата история</h3><div id="history"></div></div>
+  </section>
+
+  <!-- ===== Програма ===== -->
+  <section id="p-prog" class="page">
+    <div class="velvet"><div class="ribbon">Очакват ви</div><div id="progAll"></div></div>
   </section>
 
   <!-- ===== Меню ===== -->
@@ -141,9 +150,10 @@
 </main>
 
 <nav class="tabs-bottom hidden" id="tabs">
-  <button data-tab="p-card" class="active"><span>💳</span>Карта</button>
+  <button data-tab="p-card" class="active"><span>⭐</span>Карта</button>
   <button data-tab="p-hist"><span>📜</span>История</button>
-  <button data-tab="p-menu"><span>🍿</span>Меню</button>
+  <button data-tab="p-menu"><span>☕</span>Меню</button>
+  <button data-tab="p-prog"><span>🎄</span>Програма</button>
   <button data-tab="p-me"><span>👤</span>Профил</button>
 </nav>
 
@@ -282,6 +292,40 @@ async function refresh() {
 }
 
 let shownCode = null;
+
+// „Тайните на звездата“: всяка оставаща игра е златна звезда, изиграната – угаснала
+function starsHtml(g) {
+  if (!g || !g.limited || !g.allowed) return '';
+  const rem = g.remaining, total = g.allowed;
+  const word = (n, one, many) => (n === 1 ? one : many);
+  const icons = total <= 30 ? `<div class="stars">${'<b>★</b>'.repeat(rem)}${'<i>☆</i>'.repeat(Math.max(0, total - rem))}</div>` : '';
+  return icons + `<div class="stars-cap">${rem
+    ? `Остават ти <b>${rem} ${word(rem, 'звезда', 'звезди')}</b> = ${rem} ${word(rem, 'игра', 'игри')}`
+    : 'Всички звезди са събрани ✨ За още игри платете нов вход.'}</div>`;
+}
+
+// Програма на събитието (въвежда се от администрацията)
+function progItem(p, next) {
+  return `<div class="prog-item ${next ? 'now' : ''}"><span class="w">${esc(p.when || '')}</span><span class="t">${esc(p.title)}</span></div>`;
+}
+function renderProgram() {
+  const list = info.program || [];
+  const d = new Date(); const p2 = (n) => String(n).padStart(2, '0');
+  const today = `${d.getFullYear()}-${p2(d.getMonth() + 1)}-${p2(d.getDate())}`;
+  const nowHm = `${p2(d.getHours())}:${p2(d.getMinutes())}`;
+  const todays = list.filter((p) => !p.date || p.date === today);
+  const nextIdx = todays.findIndex((p) => p.time && p.time >= nowHm);
+  $('#todayProg').classList.toggle('hidden', !todays.length);
+  $('#todayProgList').innerHTML = todays.map((p, i) => progItem(p, i === nextIdx)).join('');
+  // цялата програма, по дни
+  let html = '', lastDay = null;
+  for (const p of list) {
+    const day = p.date ? p.date.slice(8, 10) + '.' + p.date.slice(5, 7) : '';
+    if (day !== lastDay) { if (day) html += `<div class="day">${day === today.slice(8, 10) + '.' + today.slice(5, 7) ? 'Днес · ' : ''}${day}</div>`; lastDay = day; }
+    html += progItem(p, false);
+  }
+  $('#progAll').innerHTML = html || '<p class="muted">Програмата ще бъде обявена скоро.</p>';
+}
 function show(v, fromCache) {
   // запазваме последните данни (за офлайн) и проследяваме смяна на карта
   const list = cards().map((c) => (c.token === current.token ? { ...c, barcode: v.barcode, label: v.first_name || v.barcode, view: v } : c));
@@ -291,6 +335,7 @@ function show(v, fromCache) {
   renderChips();
   if (!$$('.page.on').length || $('#welcome').classList.contains('on')) page('p-card');
 
+  $('#hello').textContent = v.first_name ? `Здравей, ${v.first_name}! ✨` : 'Здравей! ✨';
   $('#who').textContent = v.first_name ? `${v.first_name} · ${v.kind === 'virtual' ? 'виртуална карта' : 'карта'}` : (v.kind === 'virtual' ? 'Виртуална карта' : 'Карта');
   if (shownCode !== v.barcode) {
     shownCode = v.barcode;
@@ -301,8 +346,8 @@ function show(v, fromCache) {
   $('#num').textContent = v.barcode;
   $('#balance').textContent = Number(v.balance).toLocaleString('bg-BG');
   const g = v.games;
-  $('#games').innerHTML = g && g.limited
-    ? `🎯 Остават игри: <span style="color:${g.remaining === 0 ? 'var(--bad)' : g.remaining <= 2 ? 'var(--warn)' : 'var(--ok)'}">${g.remaining}</span> <span class="muted" style="font-size:.6em">от ${g.allowed}</span>` : '';
+  $('#games').innerHTML = starsHtml(g);
+  renderProgram();
   $('#todayInfo').textContent = v.today.arrived ? `Днес в парка от ${fmtTime(v.today.arrived)}${v.today.minutes ? ' · ' + fmtDur(v.today.minutes) : ''}` : 'Днес още нямате платен вход – покажете картата на касата';
   $('#alert').innerHTML = v.blocked ? '<span class="badge bad">Картата е блокирана – обърнете се към касата</span>'
     : g && g.limited && g.remaining === 0 && g.allowed > 0 ? '<span class="badge warn">Изиграхте всички игри – за още игри платете нов вход</span>' : '';
@@ -353,7 +398,7 @@ addEventListener('offline', () => $('#offline').classList.remove('hidden'));
 
 (async () => {
   $('#park').textContent = info.park_name;
-  call('GET', '/api/public/info').then((i) => { info = i; LS.set('lp_info', i); $('#modeSeg').classList.toggle('hidden', !i.virtual_signup); $('#park').textContent = i.park_name; document.title = i.park_name; if (current && current.view) show(current.view, true); }).catch(() => {});
+  call('GET', '/api/public/info').then((i) => { info = i; LS.set('lp_info', i); $('#modeSeg').classList.toggle('hidden', !i.virtual_signup); $('#park').textContent = i.park_name; document.title = i.park_name; renderProgram(); if (current && current.view) show(current.view, true); }).catch(() => {});
   const list = cards();
   const a = LS.get('lp_active', null);
   if (list.length) openCard(list.some((c) => c.barcode === a) ? a : list[0].barcode); else showWelcome();

@@ -130,6 +130,9 @@
         <h3>📱 Приложение за клиентите</h3>
         <p class="muted small">Клиентите сканират QR кода от плаката и инсталират приложението на телефона си. Работи през техния мобилен интернет, ако сървърът е пуснат в интернет (вижте README → „Приложение за клиентите“). Към интернет се пуска само порт <b id="pubPort">3080</b> – там са достъпни само клиентските екрани.</p>
         <label>Публичен адрес (напр. https://lunapark.tailXXXX.ts.net)</label><input id="sPublic" placeholder="празно = само в Wi-Fi мрежата на парка">
+        <label>Програма в приложението – по един ред „време | заглавие“</label>
+        <textarea id="sProgram" rows="8" placeholder="12.12 17:00 | 🎭 Театрална постановка&#10;13.12 15:30 | ✂️ Крафт работилница&#10;цял ден | 👼 Ангелска поща"></textarea>
+        <p class="muted small" style="margin:4px 0 0">Времето може да е с дата („12.12 17:00“) – тогава се показва само в този ден, – само час („17:00“) или текст („цял ден“).</p>
         <div class="row" style="margin-top:12px">
           <button class="primary" id="sPubSave">Запази</button>
           <a class="btn" href="/poster.html" target="_blank">🖨 Плакат с QR код</a>
@@ -458,6 +461,7 @@ async function loadSettingsTab() {
   $('#sName').value = settings.park_name; $('#sFee').value = settings.entry_fee; $('#sCur').value = settings.currency; $('#sPts').value = settings.entry_points;
   $('#sPlays').value = settings.plays_per_entry; $('#sExpire').checked = settings.plays_expire_daily !== '0';
   $('#sPublic').value = settings.public_url || '';
+  $('#sProgram').value = settings.program || '';
   appUrl().then((u) => { $('#appLink').href = u; });
   api('GET', '/api/ping').then((p) => { $('#pubPort').textContent = p.public_port || '—'; });
   genPreview();
@@ -499,7 +503,7 @@ $('#bkNow').addEventListener('click', async () => {
 
 $('#sPubSave').addEventListener('click', async () => {
   try {
-    settings = await api('PUT', '/api/settings', { public_url: $('#sPublic').value });
+    settings = await api('PUT', '/api/settings', { public_url: $('#sPublic').value, program: $('#sProgram').value });
     $('#sPublic').value = settings.public_url || '';
     appUrl().then((u) => { $('#appLink').href = u; });
     toast('Запазено', 'ok');

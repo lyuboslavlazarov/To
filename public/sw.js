@@ -4,8 +4,9 @@
  * за да се отваря и показва картата (баркода) дори без интернет.
  * Данните (точки, история) винаги се взимат от сървъра, когато има връзка.
  */
-const CACHE = 'lunapark-app-v1';
-const SHELL = ['/app', '/style.css', '/code128.js', '/vendor/qrcode.js', '/camera.js', '/manifest.webmanifest', '/icons/icon-192.png'];
+const CACHE = 'lunapark-app-v2';
+const SHELL = ['/app', '/style.css', '/code128.js', '/vendor/qrcode.js', '/camera.js', '/manifest.webmanifest', '/icons/icon-192.png',
+  '/theme/star.css', '/theme/header.jpg', '/fonts/fonts.css', '/fonts/MarckScript-400-cyrillic.woff2', '/fonts/PoiretOne-400-cyrillic.woff2'];
 
 self.addEventListener('install', (e) => {
   e.waitUntil(caches.open(CACHE).then((c) => c.addAll(SHELL)).then(() => self.skipWaiting()));

@@ -145,6 +145,8 @@ const DEFAULT_SETTINGS = {
   currency: '€',
   plays_per_entry: '10',     // игри за едно платено влизане (0 = без ограничение)
   plays_expire_daily: '1',   // 1 = неизползваните игри изгарят в края на деня
+  // програма на събитието за приложението: по един ред „време | заглавие“; времето може да е „12.12 17:00“
+  program: 'цял ден | 🎯 Много игри\nуточнява се | 🎭 Театрална постановка\nцял ден | 🎁 Подаръци под елхата\nцял ден | 👼 Ангелска поща\nцял ден | ✂️ Крафт работилница\nцял ден | ☕ Топъл шоколад и ароматни курабийки',
 };
 const insSetting = db.prepare('INSERT OR IGNORE INTO settings(key, value) VALUES (?, ?)');
 for (const [k, v] of Object.entries(DEFAULT_SETTINGS)) insSetting.run(k, v);

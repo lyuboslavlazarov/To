@@ -33,8 +33,14 @@ const STATIC = {
   '/icons/icon-192.png': 'icons/icon-192.png',
   '/icons/icon-512.png': 'icons/icon-512.png',
   '/icons/apple-touch-icon.png': 'icons/apple-touch-icon.png',
+  '/theme/star.css': 'theme/star.css',
+  '/theme/header.jpg': 'theme/header.jpg',
+  '/fonts/fonts.css': 'fonts/fonts.css',
 };
-const MIME = { '.html': 'text/html; charset=utf-8', '.js': 'text/javascript; charset=utf-8', '.css': 'text/css; charset=utf-8', '.png': 'image/png', '.webmanifest': 'application/manifest+json' };
+for (const f of ['MarckScript-400-cyrillic', 'MarckScript-400-latin', 'PoiretOne-400-cyrillic', 'PoiretOne-400-latin', 'Lobster-400-cyrillic', 'Lobster-400-latin']) {
+  STATIC[`/fonts/${f}.woff2`] = `fonts/${f}.woff2`;
+}
+const MIME = { '.html': 'text/html; charset=utf-8', '.js': 'text/javascript; charset=utf-8', '.css': 'text/css; charset=utf-8', '.png': 'image/png', '.jpg': 'image/jpeg', '.woff2': 'font/woff2', '.webmanifest': 'application/manifest+json' };
 const SECURITY_HEADERS = {
   'X-Content-Type-Options': 'nosniff',
   'X-Frame-Options': 'DENY',
@@ -43,6 +49,24 @@ const SECURITY_HEADERS = {
 };
 
 const digits = (s) => String(s || '').replace(/\D/g, '');
+
+// „12.12 17:00 | 🎭 Театрална постановка“ -> { date, time, when, title }
+function parseProgram(text) {
+  const year = new Date().getFullYear();
+  return String(text || '').split('\n').map((line) => line.trim()).filter(Boolean).map((line) => {
+    const i = line.indexOf('|');
+    let when = i >= 0 ? line.slice(0, i).trim() : '';
+    const title = (i >= 0 ? line.slice(i + 1) : line).trim();
+    let date = null;
+    const m = when.match(/^(\d{1,2})\.(\d{1,2})(?:\.(\d{4}))?\.?\s*(.*)$/);
+    if (m) {
+      date = `${m[3] || year}-${m[2].padStart(2, '0')}-${m[1].padStart(2, '0')}`;
+      when = m[4] || 'цял ден';
+    }
+    const t = when.match(/^(\d{1,2}):(\d{2})/);
+    return { date, time: t ? `${t[1].padStart(2, '0')}:${t[2]}` : null, when, title };
+  }).slice(0, 60);
+}
 const sha256 = (s) => crypto.createHash('sha256').update(s).digest('hex');
 
 // ограничаване на опитите (в паметта)
@@ -129,6 +153,7 @@ function createPublicHandler(d) {
       currency: s.currency,
       plays_per_entry: Number(s.plays_per_entry) || 0,
       virtual_signup: process.env.VIRTUAL_SIGNUP === '1',
+      program: parseProgram(s.program),
       games: db.prepare('SELECT name, points FROM games WHERE active=1 ORDER BY name').all(),
       products: db.prepare('SELECT name, category, points FROM products WHERE active=1 ORDER BY category, sort, name').all(),
     };

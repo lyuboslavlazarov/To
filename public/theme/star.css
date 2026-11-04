@@ -1,0 +1,92 @@
+/*
+ * Тема „Рождествен Лунапарк – Тайните на звездата“ за клиентското приложение.
+ * Нощно звездно небе + червена кадифена завеса със златни ръкописни надписи.
+ */
+:root {
+  --bg: #070d2b;
+  --bg2: #111a45;
+  --card: rgba(16, 24, 66, .82);
+  --line: rgba(232, 196, 106, .28);
+  --text: #f6eedb;
+  --muted: #b9bde8;
+  --accent: #ffd76a;
+  --accent2: #ffe7a3;
+  --gold: #e8c46a;
+  --velvet: #7a0f19;
+}
+body {
+  font-family: system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+  background-color: #070d2b;
+  background-image:
+    radial-gradient(1.5px 1.5px at 12% 18%, #fff, transparent), radial-gradient(1px 1px at 70% 12%, #fff, transparent),
+    radial-gradient(1.5px 1.5px at 86% 46%, #ffe9a8, transparent), radial-gradient(1px 1px at 38% 66%, #fff, transparent),
+    radial-gradient(1px 1px at 8% 84%, #fff, transparent), radial-gradient(1.5px 1.5px at 58% 92%, #ffe9a8, transparent),
+    radial-gradient(1px 1px at 93% 78%, #fff, transparent), radial-gradient(1px 1px at 28% 44%, #fff, transparent),
+    radial-gradient(1px 1px at 50% 28%, #fff, transparent), radial-gradient(1.5px 1.5px at 78% 64%, #fff, transparent),
+    linear-gradient(180deg, #0b1442 0%, #070d2b 55%, #050819 100%);
+  background-attachment: fixed;
+  background-size: 420px 520px, 380px 470px, 460px 560px, 400px 500px, 440px 540px, 410px 510px, 390px 480px, 430px 520px, 370px 460px, 450px 550px, 100% 100%;
+}
+.script { font-family: 'Marck Script', cursive; font-weight: 400; }
+.deco { font-family: 'Poiret One', system-ui, sans-serif; }
+
+/* --- горна картина от плаката --- */
+header.hero { position: relative; aspect-ratio: 1200 / 333; max-height: 190px; width: 100%;
+  background: #070d2b url(/theme/header.jpg) center top / cover no-repeat; padding-top: env(safe-area-inset-top); }
+header.hero::after { content: ''; position: absolute; left: 0; right: 0; bottom: -1px; height: 40%;
+  background: linear-gradient(180deg, rgba(7, 13, 43, 0), #0a1440); }
+header.hero #installBtn { position: absolute; right: 10px; top: calc(10px + env(safe-area-inset-top)); z-index: 2;
+  background: rgba(7, 13, 43, .7); border: 1px solid var(--gold); color: var(--accent); }
+header.hero h1 { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); }
+
+.panel { background: var(--card); border-color: var(--line); backdrop-filter: blur(2px); }
+h2, h3 { color: var(--accent2); }
+button.primary { background: linear-gradient(180deg, #ffe08a, #e8b84a); color: #3a2400; box-shadow: 0 0 16px rgba(255, 200, 80, .35); }
+.chip.active { background: var(--accent); color: #2a1b00; }
+.seg button.active { background: var(--accent); color: #2a1b00; }
+
+/* --- поздрав и карта --- */
+.hello { text-align: center; font-family: 'Marck Script', cursive; font-size: 30px; color: var(--accent2);
+  text-shadow: 0 0 12px rgba(255, 200, 80, .45); margin: 0 0 10px; }
+.pass { background: #fffaf0 !important; box-shadow: 0 0 0 2px var(--gold), 0 0 30px rgba(255, 210, 110, .3); }
+.pass .who { font-family: 'Marck Script', cursive; font-size: 22px; color: #8d1420 !important; font-weight: 400 !important; }
+
+/* --- точки и звезди --- */
+.score { text-align: center; padding: 16px 10px 12px; }
+.score .pts { font-family: 'Poiret One', system-ui, sans-serif; font-weight: 400; font-size: 72px; color: var(--accent);
+  text-shadow: 0 0 14px rgba(255, 200, 80, .8), 0 0 30px rgba(255, 190, 60, .35); }
+.score .pts-l { letter-spacing: 3px; font-size: 12px; color: var(--muted); }
+.stars { display: flex; justify-content: center; flex-wrap: wrap; gap: 3px; font-size: 26px; margin-top: 10px; line-height: 1; }
+.stars b { color: #ffd76a; text-shadow: 0 0 8px rgba(255, 200, 80, .9); font-weight: 400; }
+.stars i { color: #3a416e; font-style: normal; }
+.stars-cap { font-size: 13px; color: var(--muted); margin-top: 6px; }
+.stars-cap b { color: var(--accent); }
+
+/* --- червена завеса: програма --- */
+.velvet { position: relative; border-radius: 16px; padding: 30px 16px 14px; margin-top: 26px; border: 1px solid rgba(232, 196, 106, .55);
+  background:
+    repeating-linear-gradient(90deg, rgba(0,0,0,.28) 0 6px, rgba(255,255,255,.05) 14px, rgba(0,0,0,.22) 26px, rgba(0,0,0,.35) 34px),
+    linear-gradient(180deg, #9a1622 0%, #6d0c16 60%, #4a0710 100%);
+  box-shadow: 0 10px 30px rgba(0,0,0,.45); color: #fbe9d0; }
+.ribbon { position: absolute; left: 50%; top: -18px; transform: translateX(-50%) rotate(-2deg); white-space: nowrap; z-index: 1;
+  padding: 5px 26px; background: linear-gradient(180deg, #d42a35, #a8141f); color: #fff4d8;
+  font-family: 'Marck Script', cursive; font-size: 21px; box-shadow: 0 4px 10px rgba(0,0,0,.45); }
+.ribbon::before, .ribbon::after { content: ''; position: absolute; top: 7px; border: 15px solid #7f0c16; z-index: -1; }
+.ribbon::before { left: -20px; border-left-color: transparent; }
+.ribbon::after { right: -20px; border-right-color: transparent; }
+.velvet .prog-item { display: flex; gap: 10px; align-items: baseline; padding: 8px 0; border-bottom: 1px dashed rgba(255, 220, 170, .28); }
+.velvet .prog-item:last-child { border-bottom: 0; }
+.velvet .prog-item .w { min-width: 64px; font-weight: 700; color: #ffd98a; font-variant-numeric: tabular-nums; }
+.velvet .prog-item .t { flex: 1; }
+.velvet .prog-item.now { background: rgba(255, 215, 106, .12); border-radius: 8px; padding-left: 6px; }
+.velvet .day { font-family: 'Marck Script', cursive; font-size: 22px; color: #ffe7a3; margin: 8px 0 2px; }
+.velvet .muted { color: #f2d1b0; }
+
+/* --- долна навигация --- */
+.tabs-bottom { background: rgba(6, 10, 34, .96) !important; border-top: 1px solid rgba(232, 196, 106, .4) !important; }
+.tabs-bottom button.active { color: var(--accent) !important; }
+.offline { background: rgba(255, 215, 106, .12); color: var(--accent2); }
+
+/* по-компактна карта – точките и звездите да се виждат без превъртане */
+.pass .qr svg { width: 128px !important; height: 128px !important; }
+.pass svg.bc { height: 78px !important; }

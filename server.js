@@ -143,7 +143,7 @@ route('GET', '/api/ping', () => ({ ok: true, time: now(), admin_pin: !!ADMIN_PIN
 // Настройки
 route('GET', '/api/settings', () => getSettings());
 route('PUT', '/api/settings', ({ body }) => {
-  const allowed = ['park_name', 'entry_fee', 'entry_points', 'currency', 'backup_dir', 'backup_interval', 'plays_per_entry', 'plays_expire_daily', 'public_url'];
+  const allowed = ['park_name', 'entry_fee', 'entry_points', 'currency', 'backup_dir', 'backup_interval', 'plays_per_entry', 'plays_expire_daily', 'public_url', 'program'];
   const up = db.prepare('INSERT INTO settings(key,value) VALUES(?,?) ON CONFLICT(key) DO UPDATE SET value=excluded.value');
   for (const k of allowed) {
     if (body[k] === undefined) continue;
@@ -151,6 +151,7 @@ route('PUT', '/api/settings', ({ body }) => {
     if (k === 'entry_fee') { const n = Number(v); if (!(n >= 0)) throw bad('Невалидна цена на вход'); v = String(n); }
     if (k === 'entry_points') v = String(int(v, 'начални точки', { min: 0, max: 100000 }));
     if (k === 'backup_interval') v = String(int(v, 'интервал', { min: 5, max: 1440 }));
+    if (k === 'program') v = String(body[k] ?? '').replace(/\r/g, '').slice(0, 4000).trim();
     if (k === 'public_url') {
       v = str(body[k], 300).replace(/\/+$/, '');
       if (v && !/^https?:\/\/[^\s/]+/i.test(v)) throw bad('Адресът трябва да започва с https://');
