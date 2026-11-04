@@ -199,3 +199,44 @@ test('замяна на изгубена карта', async () => {
   assert.equal(h.replacements.length, 1);
   assert.equal(h.plays.length, 4);
 });
+
+test('престой в парка: пристигане, тръгване, продължителност', async () => {
+  const { db } = require('../db');
+  const D = '2026-01-10';
+  await call('PUT', '/api/cards/LP0200', { name: 'Стоян' });
+  await call('PUT', '/api/cards/LP0201', { name: 'Вера' });
+  const ins = (sql, ...a) => db.prepare(sql).run(...a);
+  // Стоян: вход 10:05, игри 10:30 и 11:40 (+30 т.), покупка 12:50 за 30 т. -> изхарчил всичко
+  ins('INSERT INTO visits(barcode,amount,points,ts) VALUES(?,?,?,?)', 'LP0200', 20, 0, `${D} 10:05:00`);
+  ins('INSERT INTO plays(barcode,game_id,game_name,points,ts) VALUES(?,?,?,?,?)', 'LP0200', 1, 'Стрелба', 10, `${D} 10:30:00`);
+  ins('INSERT INTO plays(barcode,game_id,game_name,points,ts) VALUES(?,?,?,?,?)', 'LP0200', 1, 'Стрелба', 20, `${D} 11:40:00`);
+  ins('INSERT INTO purchases(barcode,total,ts) VALUES(?,?,?)', 'LP0200', 30, `${D} 12:50:00`);
+  // Вера: вход 14:00, игра 15:15, без покупка -> тръгване по последна игра
+  ins('INSERT INTO visits(barcode,amount,points,ts) VALUES(?,?,?,?)', 'LP0201', 20, 0, `${D} 14:00:00`);
+  ins('INSERT INTO plays(barcode,game_id,game_name,points,ts) VALUES(?,?,?,?,?)', 'LP0201', 1, 'Стрелба', 10, `${D} 15:15:00`);
+
+  const s = (await call('GET', `/api/stats?from=${D}&to=${D}`)).data;
+  const st = Object.fromEntries(s.stays.map((r) => [r.barcode, r]));
+  assert.equal(st.LP0200.arrived, `${D} 10:05:00`);
+  assert.equal(st.LP0200.left, `${D} 12:50:00`);
+  assert.equal(st.LP0200.left_by, 'purchase');
+  assert.equal(st.LP0200.minutes, 165);
+  assert.equal(st.LP0200.spent_all, true);
+  assert.equal(st.LP0200.plays, 2);
+  assert.equal(st.LP0201.left_by, 'play');
+  assert.equal(st.LP0201.minutes, 75);
+  assert.equal(st.LP0201.spent_all, false);
+  assert.equal(st.LP0201.balance_end, 10);
+  assert.equal(s.stay.visits, 2);
+  assert.equal(s.stay.avg_minutes, 120);
+  assert.equal(s.stay.max_minutes, 165);
+  assert.equal(s.stay.spent_all, 1);
+  assert.equal(s.stay.avg_arrival, '12:03');
+  // в картата на посетителя
+  const h = (await call('GET', '/api/cards/LP0200/history')).data;
+  assert.equal(h.stays.length, 1);
+  assert.equal(h.stay.avg_minutes, 165);
+  // CSV
+  const c = (await call('GET', `/api/export/stays?from=${D}&to=${D}`)).data;
+  assert.match(c, /LP0200;Стоян;10:05;12:50;последна покупка;2:45;165/);
+});

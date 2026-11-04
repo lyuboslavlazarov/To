@@ -31,6 +31,7 @@
       <button id="btnAll" class="ghost">Всичко</button>
       <div class="grow"></div>
       <button id="expActivity">⬇ CSV активност</button>
+      <button id="expStays">⬇ CSV престой</button>
       <button id="expCards">⬇ CSV карти</button>
     </div>
     <div class="stats" id="totals" style="margin:16px 0"></div>
@@ -39,6 +40,28 @@
       <div class="panel"><h3>🍔 Продукти</h3><table><thead><tr><th>Продукт</th><th>Брой</th><th>Точки</th><th></th></tr></thead><tbody id="tProducts"></tbody></table></div>
       <div class="panel"><h3>🕐 Игри по час</h3><table><tbody id="tHours"></tbody></table></div>
       <div class="panel"><h3>📅 Входове по дни</h3><table><thead><tr><th>Ден</th><th>Входове</th><th>Сума (статистика)</th></tr></thead><tbody id="tDays"></tbody></table></div>
+      <div class="panel" style="grid-column:1/-1">
+        <h3>⏱ Престой в парка</h3>
+        <p class="muted small" style="margin-top:-6px">Пристигане = платен вход · Тръгване = последното харчене на точки в зоната за хранене (ако не е пазарувал – последната игра) · Престой = тръгване − пристигане</p>
+        <div class="stats" id="stayTiles"></div>
+        <div class="grid2" style="margin-top:14px">
+          <div><h4 style="margin:0 0 6px">Пристигания по час</h4><table><tbody id="tArr"></tbody></table></div>
+          <div><h4 style="margin:0 0 6px">Тръгвания по час</h4><table><tbody id="tDep"></tbody></table></div>
+        </div>
+        <div class="row" style="margin-top:14px">
+          <h4 class="grow" style="margin:0">Всички посещения</h4>
+          <label style="margin:0">Подреди по</label>
+          <select id="staySort" style="width:auto">
+            <option value="arrived">пристигане</option>
+            <option value="minutes">престой (най-дълъг)</option>
+            <option value="left">тръгване</option>
+            <option value="name">име</option>
+          </select>
+        </div>
+        <div class="scroll" style="max-height:50vh; margin-top:8px"><table>
+          <thead><tr><th>Дата</th><th>Карта</th><th>Име</th><th>Пристигане</th><th>Тръгване</th><th>Престой</th><th>Игри</th><th>Изхарчени</th><th>Остатък</th></tr></thead>
+          <tbody id="tStays"></tbody></table></div>
+      </div>
       <div class="panel" style="grid-column:1/-1"><h3>🏆 Най-активни играчи</h3><table><thead><tr><th>Карта</th><th>Име</th><th>Игри</th><th>Точки</th></tr></thead><tbody id="tTop"></tbody></table></div>
     </div>
   </section>
@@ -168,6 +191,33 @@ $('#from').addEventListener('change', loadStats);
 $('#to').addEventListener('change', loadStats);
 $('#expActivity').addEventListener('click', () => { location.href = `/api/export/activity?from=${$('#from').value}&to=${$('#to').value}${pinQ()}`; });
 $('#expCards').addEventListener('click', () => { location.href = `/api/export/cards?x=1${pinQ()}`; });
+$('#expStays').addEventListener('click', () => { location.href = `/api/export/stays?from=${$('#from').value}&to=${$('#to').value}${pinQ()}`; });
+let lastStays = [];
+$('#staySort').addEventListener('change', () => renderStays(lastStays));
+
+function stayRow(r, withCard = true) {
+  return `<tr ${withCard ? `data-card="${esc(r.barcode)}" style="cursor:pointer"` : ''}>
+    <td>${fmtDate(r.day)} <span class="muted small">${weekday(r.day)}</span></td>
+    ${withCard ? `<td>${esc(r.barcode)}</td><td>${esc(r.name || '—')}</td>` : ''}
+    <td><b>${fmtTime(r.arrived)}</b></td>
+    <td>${leftText(r)}</td>
+    <td><b>${fmtDuration(r.minutes)}</b></td>
+    <td>${r.plays}</td>
+    <td>${r.spent}</td>
+    <td>${r.balance_end}${r.spent_all ? ' <span class="badge ok">изхарчил всичко</span>' : ''}</td></tr>`;
+}
+function renderStays(rows) {
+  lastStays = rows;
+  const k = $('#staySort').value;
+  const sorted = [...rows].sort((a, b) => {
+    if (k === 'minutes') return (b.minutes ?? -1) - (a.minutes ?? -1);
+    if (k === 'left') return String(b.left || '').localeCompare(String(a.left || ''));
+    if (k === 'name') return String(a.name || '').localeCompare(String(b.name || ''), 'bg');
+    return String(b.day + b.arrived).localeCompare(String(a.day + a.arrived));
+  });
+  $('#tStays').innerHTML = sorted.map((r) => stayRow(r)).join('') || '<tr><td class="muted" colspan="9">Няма посещения за периода</td></tr>';
+  $$('#tStays [data-card]').forEach((tr) => tr.addEventListener('click', () => openCard(tr.dataset.card)));
+}
 
 function bars(rows, key) {
   const max = Math.max(1, ...rows.map((r) => r[key]));
@@ -201,6 +251,20 @@ async function loadStats() {
     $('#tDays').innerHTML = s.byDay.map((r) => `<tr><td>${fmtDate(r.day)} <span class="muted small">${weekday(r.day)}</span></td><td>${r.entries}</td><td>${money(r.amount, cur)}</td></tr>`).join('') || '<tr><td class="muted" colspan="3">Няма данни</td></tr>';
     $('#tTop').innerHTML = s.topPlayers.map((r) => `<tr class="clickable" data-card="${esc(r.barcode)}" style="cursor:pointer"><td>${esc(r.barcode)}</td><td>${esc(r.name || '—')}</td><td>${r.plays}</td><td>${r.points}</td></tr>`).join('') || '<tr><td class="muted" colspan="4">Няма данни</td></tr>';
     $$('#tTop [data-card]').forEach((tr) => tr.addEventListener('click', () => openCard(tr.dataset.card)));
+    const st = s.stay;
+    $('#stayTiles').innerHTML = [
+      [st.visits, 'Посещения'],
+      [fmtDuration(st.avg_minutes), 'Среден престой'],
+      [fmtDuration(st.median_minutes), 'Типичен престой (медиана)'],
+      [fmtDuration(st.max_minutes), 'Най-дълъг престой'],
+      [st.avg_arrival || '—', 'Средно пристигане'],
+      [st.avg_left || '—', 'Средно тръгване'],
+      [`${st.spent_all} / ${st.visits}`, 'Изхарчили всички точки'],
+    ].map(([v, l]) => `<div class="stat"><div class="v">${v}</div><div class="l">${l}</div></div>`).join('');
+    const hourRows = (list) => { const b = bars(list, 'n'); return list.map((r) => `<tr><td style="width:70px">${r.hour}:00</td><td style="width:40px">${r.n}</td><td>${b(r)}</td></tr>`).join('') || '<tr><td class="muted">Няма данни</td></tr>'; };
+    $('#tArr').innerHTML = hourRows(st.arrivals_by_hour);
+    $('#tDep').innerHTML = hourRows(st.departures_by_hour);
+    renderStays(s.stays);
   } catch (e) { toast(e.message, 'bad'); }
 }
 
@@ -282,6 +346,11 @@ async function openCard(code) {
     <div class="scroll" style="max-height:300px"><table><thead><tr><th>Дата и час</th><th>Продукти</th><th>Точки</th><th>Пост</th><th></th></tr></thead><tbody>
       ${h.purchases.map((p) => `<tr class="${p.voided ? 'voided' : ''}"><td>${fmtTs(p.ts)} <span class="muted small">${weekday(p.ts)}</span></td><td>${p.items.map((i) => `${i.qty}× ${esc(i.name)} (${i.points})`).join(', ')}</td><td>−${p.total}</td><td>${esc(p.station)}</td>
         <td>${p.voided ? '' : `<button class="ghost sm" data-void-purchase="${p.id}">Анулирай</button>`}</td></tr>`).join('') || '<tr><td class="muted" colspan="5">Няма</td></tr>'}</tbody></table></div>
+
+    <h3 style="margin-top:18px">⏱ Посещения и престой</h3>
+    <p class="muted small" style="margin-top:-6px">Среден престой: <b>${fmtDuration(h.stay.avg_minutes)}</b> · най-дълъг: <b>${fmtDuration(h.stay.max_minutes)}</b> · обикновено пристига в <b>${h.stay.avg_arrival || '—'}</b> и тръгва в <b>${h.stay.avg_left || '—'}</b></p>
+    <div class="scroll" style="max-height:260px"><table><thead><tr><th>Дата</th><th>Пристигане</th><th>Тръгване</th><th>Престой</th><th>Игри</th><th>Изхарчени</th><th>Остатък</th></tr></thead><tbody>
+      ${h.stays.map((r) => stayRow(r, false)).join('') || '<tr><td class="muted" colspan="7">Няма посещения</td></tr>'}</tbody></table></div>
 
     <h3 style="margin-top:18px">🎟️ Платени входове</h3>
     <div class="scroll" style="max-height:240px"><table><thead><tr><th>Дата и час</th><th>Сума</th><th>Начални точки</th><th>Пост</th><th></th></tr></thead><tbody>

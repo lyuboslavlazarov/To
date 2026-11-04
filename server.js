@@ -107,7 +107,8 @@ function cardHistory(code) {
       FROM purchase_items i JOIN purchases p ON p.id=i.purchase_id
       WHERE p.barcode=? AND p.voided=0 GROUP BY i.name ORDER BY qty DESC`).all(code);
   const replacements = db.prepare('SELECT * FROM card_replacements WHERE new_barcode=? OR old_barcode=? ORDER BY id DESC').all(code, code);
-  return { visits, plays, purchases, adjustments, byGame, byProduct, replacements };
+  const cardStays = stays('0000-01-01 00:00:00', '9999-12-31 23:59:59', code);
+  return { visits, plays, purchases, adjustments, byGame, byProduct, replacements, stays: cardStays, stay: staySummary(cardStays) };
 }
 
 // ---------- API ----------
@@ -433,6 +434,72 @@ route('GET', '/api/recent', ({ query }) => {
   throw bad('Невалидна заявка');
 });
 
+// ---------- Престой в парка ----------
+// Едно посещение = карта + ден с платен вход.
+//   пристигане = първият платен вход за деня
+//   тръгване   = последното харчене на точки в зоната за хранене; ако не е пазарувал – последната игра
+//   престой    = тръгване − пристигане
+const qStays = db.prepare(`
+  WITH v AS (
+    SELECT barcode, substr(ts,1,10) AS day, MIN(ts) AS arrived, COUNT(*) AS entries, SUM(amount) AS paid
+    FROM visits WHERE voided=0 AND ts BETWEEN ?1 AND ?2 AND (?3 IS NULL OR barcode=?3)
+    GROUP BY barcode, day)
+  SELECT v.*, c.name,
+    (SELECT MAX(ts) FROM plays p WHERE p.barcode=v.barcode AND p.voided=0 AND p.ts BETWEEN v.arrived AND v.day||' 23:59:59') AS last_play,
+    (SELECT COUNT(*) FROM plays p WHERE p.barcode=v.barcode AND p.voided=0 AND p.ts BETWEEN v.arrived AND v.day||' 23:59:59') AS plays,
+    (SELECT MAX(ts) FROM purchases u WHERE u.barcode=v.barcode AND u.voided=0 AND u.ts BETWEEN v.arrived AND v.day||' 23:59:59') AS last_purchase,
+    (SELECT COALESCE(SUM(total),0) FROM purchases u WHERE u.barcode=v.barcode AND u.voided=0 AND u.ts BETWEEN v.arrived AND v.day||' 23:59:59') AS spent,
+    (SELECT COALESCE(SUM(points),0) FROM visits x WHERE x.barcode=v.barcode AND x.voided=0 AND x.ts <= v.day||' 23:59:59')
+  + (SELECT COALESCE(SUM(points),0) FROM plays x WHERE x.barcode=v.barcode AND x.voided=0 AND x.ts <= v.day||' 23:59:59')
+  + (SELECT COALESCE(SUM(points),0) FROM adjustments x WHERE x.barcode=v.barcode AND x.ts <= v.day||' 23:59:59')
+  - (SELECT COALESCE(SUM(total),0) FROM purchases x WHERE x.barcode=v.barcode AND x.voided=0 AND x.ts <= v.day||' 23:59:59') AS balance_end
+  FROM v LEFT JOIN cards c ON c.barcode=v.barcode
+  ORDER BY v.day DESC, v.arrived DESC`);
+
+const tsMs = (ts) => Date.parse(ts.replace(' ', 'T') + 'Z');
+function stays(from, to, barcode = null) {
+  const day = today();
+  return qStays.all(from, to, barcode).map((r) => {
+    const left = r.last_purchase || r.last_play || null;
+    const minutes = left ? Math.max(0, Math.round((tsMs(left) - tsMs(r.arrived)) / 60000)) : null;
+    return {
+      ...r,
+      left,
+      left_by: r.last_purchase ? 'purchase' : r.last_play ? 'play' : null,
+      minutes,
+      spent_all: !!r.last_purchase && r.balance_end <= 0,
+      in_park: r.day === day && !(r.last_purchase && r.balance_end <= 0),
+    };
+  });
+}
+function staySummary(rows) {
+  const m = rows.filter((r) => r.minutes != null).map((r) => r.minutes).sort((x, y) => x - y);
+  const avgTime = (list) => {
+    if (!list.length) return null;
+    const mins = list.map((ts) => Number(ts.slice(11, 13)) * 60 + Number(ts.slice(14, 16)));
+    const a = Math.round(mins.reduce((x, y) => x + y, 0) / mins.length);
+    return `${String(Math.floor(a / 60)).padStart(2, '0')}:${String(a % 60).padStart(2, '0')}`;
+  };
+  const hours = (list) => {
+    const h = {};
+    for (const ts of list) { const k = ts.slice(11, 13); h[k] = (h[k] || 0) + 1; }
+    return Object.entries(h).sort().map(([hour, n]) => ({ hour, n }));
+  };
+  return {
+    visits: rows.length,
+    with_time: m.length,
+    avg_minutes: m.length ? Math.round(m.reduce((a, b) => a + b, 0) / m.length) : null,
+    median_minutes: m.length ? m[Math.floor((m.length - 1) / 2)] : null,
+    max_minutes: m.length ? m[m.length - 1] : null,
+    min_minutes: m.length ? m[0] : null,
+    spent_all: rows.filter((r) => r.spent_all).length,
+    avg_arrival: avgTime(rows.map((r) => r.arrived)),
+    avg_left: avgTime(rows.filter((r) => r.left).map((r) => r.left)),
+    arrivals_by_hour: hours(rows.map((r) => r.arrived)),
+    departures_by_hour: hours(rows.filter((r) => r.left).map((r) => r.left)),
+  };
+}
+
 // Статистика
 function range(query) {
   const from = /^\d{4}-\d{2}-\d{2}$/.test(query.from || '') ? query.from : today();
@@ -465,6 +532,7 @@ route('GET', '/api/stats', ({ query }) => {
     topPlayers: all(`SELECT p.barcode, c.name, COUNT(*) AS plays, SUM(p.points) AS points
       FROM plays p JOIN cards c ON c.barcode=p.barcode WHERE p.voided=0 AND p.ts BETWEEN ? AND ?
       GROUP BY p.barcode ORDER BY plays DESC LIMIT 20`),
+    ...(() => { const st = stays(a, b); return { stays: st.slice(0, 1000), stay: staySummary(st) }; })(),
   };
 }, { admin: true });
 
@@ -497,6 +565,19 @@ route('GET', '/api/export/:kind', ({ params, query }) => {
         FROM cards c ORDER BY barcode`).all();
       for (const r of rows) r.balance = balance(r.barcode);
       cols = [['barcode', 'Баркод'], ['name', 'Име'], ['phone', 'Телефон'], ['age', 'Възраст'], ['note', 'Бележка'], ['visits', 'Брой входове'], ['entry_paid', 'Платено за вход (€)'], ['plays', 'Брой игри'], ['purchases', 'Брой покупки'], ['balance', 'Баланс точки'], ['blocked', 'Блокирана']];
+      break;
+    case 'stays':
+      rows = stays(a, b).map((r) => ({
+        ...r,
+        arrived_time: r.arrived.slice(11, 16),
+        left_time: r.left ? r.left.slice(11, 16) : '',
+        left_by_text: r.left_by === 'purchase' ? 'последна покупка' : r.left_by === 'play' ? 'последна игра' : '',
+        duration: r.minutes == null ? '' : `${Math.floor(r.minutes / 60)}:${String(r.minutes % 60).padStart(2, '0')}`,
+        spent_all_text: r.spent_all ? 'да' : 'не',
+      }));
+      cols = [['day', 'Дата'], ['barcode', 'Баркод'], ['name', 'Име'], ['arrived_time', 'Пристигане'], ['left_time', 'Тръгване'],
+        ['left_by_text', 'Тръгване по'], ['duration', 'Престой (ч:мин)'], ['minutes', 'Престой (мин)'], ['plays', 'Игри'],
+        ['spent', 'Изхарчени точки'], ['balance_end', 'Остатък точки'], ['spent_all_text', 'Изхарчил всичко']];
       break;
     default:
       throw notFound('Непознат експорт');

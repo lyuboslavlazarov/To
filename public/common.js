@@ -142,6 +142,18 @@ function todayStr() {
 /** Оставащи игри: „7 от 10“ или „без ограничение“ */
 function gamesLeft(g) { return !g || !g.limited ? 'без ограничение' : `${g.remaining} от ${g.allowed}`; }
 function gamesColor(g) { return !g || !g.limited ? 'var(--muted)' : g.remaining === 0 ? 'var(--bad)' : g.remaining <= 2 ? 'var(--warn)' : 'var(--ok)'; }
+/** Продължителност в минути -> „2 ч 15 мин“ */
+function fmtDuration(min) {
+  if (min == null) return '—';
+  const h = Math.floor(min / 60), m = min % 60;
+  return h ? `${h} ч ${String(m).padStart(2, '0')} мин` : `${m} мин`;
+}
+/** Час на тръгване + откъде е взет */
+function leftText(r) {
+  if (!r.left) return r.in_park ? '<span class="badge ok">в парка</span>' : '—';
+  const how = r.left_by === 'purchase' ? 'последна покупка' : 'последна игра';
+  return `${fmtTime(r.left)} <span class="muted small">(${how})</span>`;
+}
 function pts(n) { return `${Number(n || 0).toLocaleString('bg-BG')} т.`; }
 function money(n, cur = '€') { return `${Number(n || 0).toLocaleString('bg-BG', { maximumFractionDigits: 2 })} ${cur}`; }
 
