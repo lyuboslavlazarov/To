@@ -111,7 +111,9 @@ function cardHistory(code) {
   const plays = db.prepare('SELECT * FROM plays WHERE barcode=? ORDER BY ts DESC, id DESC').all(code);
   const purchases = db.prepare('SELECT * FROM purchases WHERE barcode=? ORDER BY ts DESC, id DESC').all(code);
   const items = db.prepare('SELECT * FROM purchase_items WHERE purchase_id=?');
-  for (const p of purchases) p.items = items.all(p.id);
+  const qRef = db.prepare('SELECT * FROM refunds WHERE purchase_id=? ORDER BY id');
+  for (const p of purchases) { p.items = items.all(p.id); p.refunds = qRef.all(p.id); }
+  const refunds = db.prepare('SELECT * FROM refunds WHERE barcode=? ORDER BY ts DESC, id DESC').all(code);
   const adjustments = db.prepare('SELECT * FROM adjustments WHERE barcode=? ORDER BY ts DESC, id DESC').all(code);
   const byGame = db.prepare(`SELECT game_name, COUNT(*) AS times, SUM(points) AS points, MAX(ts) AS last
       FROM plays WHERE barcode=? AND voided=0 GROUP BY game_id ORDER BY times DESC`).all(code);
@@ -121,7 +123,7 @@ function cardHistory(code) {
   const replacements = db.prepare('SELECT * FROM card_replacements WHERE new_barcode=? OR old_barcode=? ORDER BY id DESC').all(code, code);
   const cardStays = stays('0000-01-01 00:00:00', '9999-12-31 23:59:59', code);
   const devices = db.prepare('SELECT COUNT(*) AS n FROM customer_sessions WHERE barcode=?').get(code).n;
-  return { visits, plays, purchases, adjustments, byGame, byProduct, replacements, stays: cardStays, stay: staySummary(cardStays), devices };
+  return { visits, plays, purchases, refunds, adjustments, byGame, byProduct, replacements, stays: cardStays, stay: staySummary(cardStays), devices };
 }
 
 // ---------- API ----------
@@ -307,7 +309,7 @@ route('POST', '/api/cards/:code/replace', ({ params, body }) => {
     }
     db.prepare('UPDATE customer_sessions SET barcode=? WHERE barcode=?').run(newCode, oldCode);
     db.prepare('UPDATE cards SET linked_to=? WHERE linked_to=?').run(newCode, oldCode);
-    for (const tbl of ['visits', 'plays', 'purchases', 'adjustments']) {
+    for (const tbl of ['visits', 'plays', 'purchases', 'adjustments', 'refunds']) {
       db.prepare(`UPDATE ${tbl} SET barcode=? WHERE barcode=?`).run(newCode, oldCode);
     }
     // ако старата карта е била заменила друга по-рано, веригата води до новата
@@ -482,6 +484,46 @@ route('POST', '/api/purchases', ({ body }) => {
     return { purchase_id: pid, total, card: cardSummary(code) };
   });
 });
+// Връщане на точки от зоната за хранене: цялата поръчка или част от нея.
+// Служителите могат да връщат поръчки от днешния ден, администраторът – винаги.
+route('POST', '/api/purchases/:id/refund', ({ params, body, isAdmin }) => {
+  const id = int(params.id, 'id');
+  return tx(() => {
+    const p = db.prepare('SELECT * FROM purchases WHERE id=?').get(id);
+    if (!p) throw notFound('Няма такава поръчка');
+    if (p.voided) throw bad('Тази поръчка вече е върната изцяло');
+    if (!(body.admin && isAdmin) && p.ts.slice(0, 10) !== today()) throw bad('Може да се връщат само днешни поръчки. За по-стари – администратор.');
+    const lines = db.prepare('SELECT * FROM purchase_items WHERE purchase_id=?').all(id);
+    let want;
+    if (Array.isArray(body.items) && body.items.length) {
+      want = body.items.map((it) => ({ line: lines.find((l) => l.id === int(it.id, 'ред')), qty: int(it.qty, 'количество', { min: 0, max: 100 }) }))
+        .filter((w) => w.qty > 0);
+      for (const w of want) {
+        if (!w.line) throw bad('Невалиден ред от поръчката');
+        if (w.qty > w.line.qty) throw bad(`Може да се върнат най-много ${w.line.qty}× ${w.line.name}`);
+      }
+    } else {
+      want = lines.map((l) => ({ line: l, qty: l.qty })); // цялата поръчка
+    }
+    if (!want.length) throw bad('Изберете какво се връща');
+    const points = want.reduce((s, w) => s + w.qty * w.line.points, 0);
+    const text = want.map((w) => `${w.qty}× ${w.line.name}`).join(', ');
+    const full = want.reduce((s, w) => s + w.qty, 0) === lines.reduce((s, l) => s + l.qty, 0);
+    if (full) {
+      db.prepare('UPDATE purchases SET voided=1 WHERE id=?').run(id); // изцяло върната – редовете остават за историята
+    } else {
+      for (const w of want) {
+        if (w.qty === w.line.qty) db.prepare('DELETE FROM purchase_items WHERE id=?').run(w.line.id);
+        else db.prepare('UPDATE purchase_items SET qty=qty-? WHERE id=?').run(w.qty, w.line.id);
+      }
+      db.prepare('UPDATE purchases SET total=total-? WHERE id=?').run(points, id);
+    }
+    db.prepare('INSERT INTO refunds(purchase_id,barcode,points,items,reason,station,ts) VALUES(?,?,?,?,?,?,?)')
+      .run(id, p.barcode, points, text, str(body.reason, 200) || 'Отказ от храната', str(body.station, 60), now());
+    return { refunded: points, items: text, full, card: cardSummary(p.barcode) };
+  });
+});
+
 route('POST', '/api/purchases/:id/void', ({ params }) => {
   const id = int(params.id, 'id');
   const p = db.prepare('SELECT * FROM purchases WHERE id=?').get(id);
@@ -510,8 +552,10 @@ route('GET', '/api/recent', ({ query }) => {
   if (query.type === 'purchases') {
     const rows = db.prepare(`SELECT p.*, c.name FROM purchases p JOIN cards c ON c.barcode=p.barcode
       ORDER BY p.id DESC LIMIT ?`).all(limit);
-    const items = db.prepare('SELECT name, qty, points FROM purchase_items WHERE purchase_id=?');
-    for (const r of rows) r.items = items.all(r.id);
+    const items = db.prepare('SELECT id, name, qty, points FROM purchase_items WHERE purchase_id=?');
+    const refs = db.prepare('SELECT points, items, reason, ts FROM refunds WHERE purchase_id=? ORDER BY id');
+    const T = today();
+    for (const r of rows) { r.items = items.all(r.id); r.refunds = refs.all(r.id); r.can_refund = !r.voided && r.ts.slice(0, 10) === T; }
     return rows;
   }
   if (query.type === 'visits') {
@@ -608,6 +652,7 @@ route('GET', '/api/stats', ({ query }) => {
       ...one(`SELECT COUNT(*) AS entries, COALESCE(SUM(amount),0) AS entry_amount, COUNT(DISTINCT barcode) AS unique_visitors FROM visits WHERE ${W}`),
       ...one(`SELECT COUNT(*) AS plays, COALESCE(SUM(points),0) AS points_won, COUNT(DISTINCT barcode) AS unique_players FROM plays WHERE ${W}`),
       ...one(`SELECT COUNT(*) AS purchases, COALESCE(SUM(total),0) AS points_spent FROM purchases WHERE ${W}`),
+      ...one('SELECT COUNT(*) AS refunds, COALESCE(SUM(points),0) AS points_refunded FROM refunds WHERE ts BETWEEN ? AND ?'),
       ...one('SELECT COALESCE(SUM(points),0) AS points_adjusted FROM adjustments WHERE ts BETWEEN ? AND ?'),
       ...one(`SELECT COALESCE(SUM(points),0) AS points_from_entry FROM visits WHERE ${W}`),
     },
@@ -641,6 +686,7 @@ route('GET', '/api/export/:kind', ({ params, query }) => {
         UNION ALL SELECT u.ts, 'Покупка', u.barcode, c.name,
           (SELECT GROUP_CONCAT(i.qty || 'x ' || i.name, ', ') FROM purchase_items i WHERE i.purchase_id=u.id), -u.total, '', u.voided
           FROM purchases u JOIN cards c USING(barcode) WHERE u.ts BETWEEN ?1 AND ?2
+        UNION ALL SELECT r.ts, 'Връщане', r.barcode, c.name, r.items || ' – ' || r.reason, r.points, '', 0 FROM refunds r JOIN cards c USING(barcode) WHERE r.ts BETWEEN ?1 AND ?2
         UNION ALL SELECT ts, 'Корекция', a.barcode, c.name, a.reason, a.points, '', 0 FROM adjustments a JOIN cards c USING(barcode) WHERE a.ts BETWEEN ?1 AND ?2
         ORDER BY ts`).all(a, b);
       cols = [['ts', 'Дата и час'], ['type', 'Тип'], ['barcode', 'Баркод'], ['name', 'Име'], ['item', 'Игра/Продукти'], ['points', 'Точки'], ['amount', 'Вход (€)'], ['voided', 'Анулирано']];

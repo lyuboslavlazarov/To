@@ -360,9 +360,11 @@ function show(v, fromCache) {
 
   const li = (l, r) => `<div class="li"><span>${l}</span><span>${r}</span></div>`;
   $('#todayPlays').innerHTML = v.today.plays.map((p) => li(`${fmtTime(p.ts)} · ${esc(p.game_name)}`, `<b class="ok">+${p.points}</b>`)).join('') || '<p class="muted">Още няма игри днес</p>';
-  $('#todayBuys').innerHTML = v.today.purchases.map((p) => li(`${fmtTime(p.ts)} · 🍔 ${p.items.map((i) => `${i.qty}× ${esc(i.name)}`).join(', ')}`, `<b class="bad">−${p.total}</b>`)).join('');
+  $('#todayBuys').innerHTML = v.today.purchases.map((p) => li(`${fmtTime(p.ts)} · 🍔 ${p.items.map((i) => `${i.qty}× ${esc(i.name)}`).join(', ')}`, `<b class="bad">−${p.total}</b>`)).join('')
+    + (v.today.refunds || []).map((r) => li(`${fmtTime(r.ts)} · ↩ Върнати: ${esc(r.items)}`, `<span class="muted small">${r.points} т. върнати</span>`)).join('');
   $('#history').innerHTML = [
     ...v.plays.map((p) => ({ ts: p.ts, h: li(`${fmtDate(p.ts)} ${fmtTime(p.ts)} · 🎯 ${esc(p.game_name)}`, `<b class="ok">+${p.points}</b>`) })),
+    ...(v.refunds || []).map((r) => ({ ts: r.ts, h: li(`${fmtDate(r.ts)} ${fmtTime(r.ts)} · ↩ Върнати: ${esc(r.items)}`, `<span class="muted small">${r.points} т. върнати</span>`) })),
     ...v.purchases.map((p) => ({ ts: p.ts, h: li(`${fmtDate(p.ts)} ${fmtTime(p.ts)} · 🍔 ${p.items.map((i) => `${i.qty}× ${esc(i.name)}`).join(', ')}`, `<b class="bad">−${p.total}</b>`) })),
   ].sort((a, b) => b.ts.localeCompare(a.ts)).map((x) => x.h).join('') || '<p class="muted">Няма история</p>';
   $('#menu').innerHTML = info.products.map((p) => `<div class="menu-item ${p.points > v.balance ? 'no' : ''}"><span>${esc(p.name)} <span class="muted small">${esc(p.category)}</span></span><b>${p.points} т. ${p.points <= v.balance ? '✓' : ''}</b></div>`).join('') || '<p class="muted">Няма продукти</p>';

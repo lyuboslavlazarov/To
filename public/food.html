@@ -118,8 +118,86 @@ function showCard() {
     <button class="ghost sm" id="dropCard">✕</button></div>
     <div style="margin-top:8px">Баланс: <span class="big" style="color:var(--accent)">${pts(card.balance)}</span></div>
     ${card.games && card.games.limited ? `<div class="muted">Остават игри: <b style="color:${gamesColor(card.games)}">${card.games.remaining}</b> от ${card.games.allowed}</div>` : ''}
-    ${card.replaced_by ? `<span class="badge bad">ЗАМЕНЕНА С ${esc(card.replaced_by)}</span>` : card.blocked ? '<span class="badge bad">БЛОКИРАНА</span>' : ''}`;
+    ${card.replaced_by ? `<span class="badge bad">ЗАМЕНЕНА С ${esc(card.replaced_by)}</span>` : card.blocked ? '<span class="badge bad">БЛОКИРАНА</span>' : ''}
+    <div id="cardOrders" style="margin-top:10px"></div>`;
   $('#dropCard').addEventListener('click', () => { card = null; showCard(); render(); });
+  loadCardOrders();
+}
+
+// Днешните поръчки на сканираната карта – за връщане, ако клиентът се откаже
+async function loadCardOrders() {
+  if (!card) return;
+  const code = card.barcode;
+  try {
+    const h = await api('GET', `/api/cards/${encodeURIComponent(code)}/history`);
+    if (!card || card.barcode !== code) return;
+    const t = todayStr();
+    const list = h.purchases.filter((p) => !p.voided && p.ts.startsWith(t));
+    const box = $('#cardOrders');
+    if (!box) return;
+    box.innerHTML = list.length ? `<div class="muted small" style="margin-bottom:4px">Днешни поръчки:</div>` + list.map((p) => `
+      <div class="row" style="padding:6px 0; border-top:1px solid var(--line); gap:8px">
+        <span class="grow small">${fmtTime(p.ts)} · ${p.items.map((i) => `${i.qty}× ${esc(i.name)}`).join(', ')}
+          ${(p.refunds || []).map((r) => `<div class="ok small">↩ върнати ${r.points} т. (${esc(r.items)})</div>`).join('')}</span>
+        <b>−${p.total}</b>
+        <button class="sm ghost" data-refund-card="${p.id}">↩ Върни</button>
+      </div>`).join('') : '';
+    $$('[data-refund-card]', box).forEach((b) => b.addEventListener('click', () => {
+      const p = list.find((x) => String(x.id) === b.dataset.refundCard);
+      openRefund({ ...p, name: h.card.name });
+    }));
+  } catch { /* ignore */ }
+}
+
+// Прозорец за връщане: цялата поръчка или част от нея
+function openRefund(p) {
+  document.querySelectorAll('.modal-bg').forEach((m) => m.remove());
+  const bg = document.createElement('div');
+  bg.className = 'modal-bg';
+  const lines = p.items.filter((i) => i.qty > 0);
+  bg.innerHTML = `<div class="modal" style="width:min(560px,100%)">
+    <div class="row"><h2 class="grow" style="margin:0">↩ Връщане на точки</h2><button class="ghost" data-close>✕</button></div>
+    <p class="muted" style="margin-top:6px">${esc(p.name || p.barcode)} · ${esc(p.barcode)} · поръчка от ${fmtTime(p.ts)} · ${p.total} т.</p>
+    <p class="small">Изберете какво връща клиентът:</p>
+    ${lines.map((i) => `<div class="cart-line">
+      <span class="n">${esc(i.name)}<div class="muted small">${i.points} т. × ${i.qty}</div></span>
+      <button class="sm ghost" data-m="${i.id}">−</button><span class="q" data-q="${i.id}">${i.qty}</span><button class="sm ghost" data-p="${i.id}">+</button>
+    </div>`).join('')}
+    <label>Причина</label>
+    <select data-reason>
+      <option>Отказ от храната</option><option>Грешна поръчка</option><option>Продуктът свърши</option><option>Друго</option>
+    </select>
+    <div class="total"><span>Връщат се</span><span data-sum></span></div>
+    <button class="primary xl" data-do style="width:100%">↩ Върни точките</button></div>`;
+  document.body.appendChild(bg);
+  const qty = Object.fromEntries(lines.map((i) => [i.id, i.qty]));
+  const upd = () => {
+    let sum = 0;
+    for (const i of lines) { bg.querySelector(`[data-q="${i.id}"]`).textContent = qty[i.id]; sum += qty[i.id] * i.points; }
+    bg.querySelector('[data-sum]').textContent = pts(sum);
+    const b = bg.querySelector('[data-do]');
+    b.disabled = sum === 0 && !lines.some((i) => qty[i.id] > 0);
+    b.textContent = `↩ Върни ${pts(sum)}`;
+  };
+  bg.querySelectorAll('[data-m]').forEach((b) => b.addEventListener('click', () => { const id = b.dataset.m; qty[id] = Math.max(0, qty[id] - 1); upd(); }));
+  bg.querySelectorAll('[data-p]').forEach((b) => b.addEventListener('click', () => {
+    const id = b.dataset.p; const max = lines.find((i) => String(i.id) === id).qty; qty[id] = Math.min(max, qty[id] + 1); upd();
+  }));
+  bg.addEventListener('click', (e) => { if (e.target === bg || e.target.hasAttribute('data-close')) bg.remove(); });
+  bg.querySelector('[data-do]').addEventListener('click', async (e) => {
+    e.target.disabled = true;
+    try {
+      const items = lines.filter((i) => qty[i.id] > 0).map((i) => ({ id: i.id, qty: qty[i.id] }));
+      if (!items.length) throw new Error('Изберете поне един продукт');
+      const r = await api('POST', `/api/purchases/${p.id}/refund`, { items, reason: bg.querySelector('[data-reason]').value, station: STATION });
+      beep(true);
+      bg.remove();
+      toast(`Върнати ${pts(r.refunded)} на ${p.name || p.barcode} · нов баланс ${pts(r.card.balance)}`, 'ok', 5000);
+      if (card && card.barcode === r.card.barcode) { card = r.card; showCard(); render(); }
+      loadRecent();
+    } catch (err) { e.target.disabled = false; beep(false); toast(err.message, 'bad', 5000); }
+  });
+  upd();
 }
 
 async function onScan(code) {
@@ -167,8 +245,11 @@ async function loadRecent() {
     const rows = await api('GET', '/api/recent?type=purchases&limit=20');
     $('#recent').innerHTML = rows.map((r) => `<tr class="${r.voided ? 'voided' : ''}">
       <td>${fmtTime(r.ts)}</td>
-      <td><b>${esc(r.name || r.barcode)}</b><div class="muted small">${r.items.map((i) => `${i.qty}× ${esc(i.name)}`).join(', ')}</div></td>
-      <td class="right">−${r.total}</td></tr>`).join('') || '<tr><td class="muted">Няма поръчки</td></tr>';
+      <td><b>${esc(r.name || r.barcode)}</b><div class="muted small">${r.items.map((i) => `${i.qty}× ${esc(i.name)}`).join(', ')}</div>
+        ${(r.refunds || []).map((x) => `<div class="ok small">↩ върнати ${x.points} т. (${esc(x.items)})</div>`).join('')}</td>
+      <td class="right">${r.voided ? 'върната' : '−' + r.total}</td>
+      <td>${r.can_refund ? `<button class="sm ghost" data-refund="${r.id}" title="Връщане на точки">↩</button>` : ''}</td></tr>`).join('') || '<tr><td class="muted">Няма поръчки</td></tr>';
+    $$('#recent [data-refund]').forEach((b) => b.addEventListener('click', () => openRefund(rows.find((x) => String(x.id) === b.dataset.refund))));
   } catch { /* ignore */ }
 }
 

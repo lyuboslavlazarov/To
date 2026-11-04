@@ -115,6 +115,22 @@ CREATE INDEX IF NOT EXISTS idx_repl_old ON card_replacements(old_barcode);
 `);
 
 // Миграция на по-стари бази: колона „заменена с“
+// Връщане на точки в зоната за хранене (клиентът се отказва от храната).
+// Покупката се намалява (или анулира изцяло), а тук остава запис кой, какво и кога е върнал.
+db.exec(`CREATE TABLE IF NOT EXISTS refunds (
+  id          INTEGER PRIMARY KEY AUTOINCREMENT,
+  purchase_id INTEGER NOT NULL,
+  barcode     TEXT NOT NULL,
+  points      INTEGER NOT NULL,
+  items       TEXT NOT NULL DEFAULT '',
+  reason      TEXT NOT NULL DEFAULT '',
+  station     TEXT NOT NULL DEFAULT '',
+  ts          TEXT NOT NULL
+);
+CREATE INDEX IF NOT EXISTS idx_refunds_card ON refunds(barcode);
+CREATE INDEX IF NOT EXISTS idx_refunds_purchase ON refunds(purchase_id);
+CREATE INDEX IF NOT EXISTS idx_refunds_ts ON refunds(ts);`);
+
 // Телефони (клиентското приложение), свързани с карта
 db.exec(`CREATE TABLE IF NOT EXISTS customer_sessions (
   token_hash TEXT PRIMARY KEY,

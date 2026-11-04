@@ -340,3 +340,41 @@ test('клиентско приложение: виртуален потреби
     publicServer.close();
   }
 });
+
+test('зона за хранене: връщане на точки (частично и изцяло)', async () => {
+  await call('POST', '/api/entry', { barcode: 'LP0500' });
+  await call('POST', '/api/cards/LP0500/adjust', { points: 100, reason: 'тест' });
+  const prods = (await call('GET', '/api/products')).data;
+  const [a, b] = prods;
+  let r = await call('POST', '/api/purchases', { barcode: 'LP0500', items: [{ product_id: a.id, qty: 2 }, { product_id: b.id, qty: 1 }] });
+  const pid = r.data.purchase_id;
+  const total = a.points * 2 + b.points;
+  assert.equal(r.data.card.balance, 100 - total);
+  const lines = (await call('GET', '/api/cards/LP0500/history')).data.purchases[0].items;
+  const la = lines.find((l) => l.product_id === a.id);
+
+  // връщане на 1 от 2 бр.
+  r = await call('POST', `/api/purchases/${pid}/refund`, { items: [{ id: la.id, qty: 1 }], reason: 'Отказ от храната' });
+  assert.equal(r.status, 200);
+  assert.equal(r.data.refunded, a.points);
+  assert.equal(r.data.full, false);
+  assert.equal(r.data.card.balance, 100 - total + a.points);
+  // повече от останалото – отказ
+  assert.equal((await call('POST', `/api/purchases/${pid}/refund`, { items: [{ id: la.id, qty: 5 }] })).status, 400);
+  // останалото изцяло
+  r = await call('POST', `/api/purchases/${pid}/refund`, {});
+  assert.equal(r.data.full, true);
+  assert.equal(r.data.card.balance, 100);
+  assert.equal((await call('POST', `/api/purchases/${pid}/refund`, {})).status, 400, 'вече е върната');
+
+  const h = (await call('GET', '/api/cards/LP0500/history')).data;
+  assert.equal(h.refunds.length, 2);
+  assert.equal(h.refunds.reduce((s, x) => s + x.points, 0), total);
+  // статистиката на продуктите не брои върнатото
+  const st = (await call('GET', '/api/stats')).data;
+  assert.ok(st.totals.points_refunded >= total);
+  // последните поръчки показват връщанията
+  const rec = (await call('GET', '/api/recent?type=purchases&limit=50')).data.find((x) => x.id === pid);
+  assert.equal(rec.voided, 1);
+  assert.equal(rec.refunds.length, 2);
+});

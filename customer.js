@@ -113,6 +113,7 @@ function createPublicHandler(d) {
     const purchases = db.prepare('SELECT id, ts, total FROM purchases WHERE barcode=? AND voided=0 ORDER BY ts DESC, id DESC LIMIT 30').all(c.barcode);
     const items = db.prepare('SELECT name, qty, points FROM purchase_items WHERE purchase_id=?');
     for (const p of purchases) { p.items = items.all(p.id); delete p.id; }
+    const refunds = db.prepare('SELECT ts, points, items FROM refunds WHERE barcode=? ORDER BY ts DESC, id DESC LIMIT 30').all(c.barcode);
     const todayStay = stays(T + ' 00:00:00', T + ' 23:59:59', c.barcode)[0] || null;
     return {
       barcode: c.barcode,
@@ -135,7 +136,9 @@ function createPublicHandler(d) {
         minutes: todayStay ? todayStay.minutes : null,
         plays: plays.filter((p) => p.ts.startsWith(T)),
         purchases: purchases.filter((p) => p.ts.startsWith(T)),
+        refunds: refunds.filter((r) => r.ts.startsWith(T)),
       },
+      refunds,
       plays,
       purchases,
     };
