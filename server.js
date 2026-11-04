@@ -57,6 +57,21 @@ SELECT
 const balance = (code) => qBalance.get(code).balance;
 
 const qCard = db.prepare('SELECT * FROM cards WHERE barcode = ?');
+
+// Колко игри остават на картата: всеки платен вход дава plays_per_entry игри.
+// При plays_expire_daily=1 се броят само днешните входове и игри (неизползваните изгарят).
+function playsInfo(code, s = getSettings()) {
+  const per = Number(s.plays_per_entry) || 0;
+  if (per <= 0) return { limited: false, per: 0, remaining: null, allowed: null, used: null, entries: null, daily: false };
+  const daily = s.plays_expire_daily !== '0';
+  const day = daily ? today() : null;
+  const W = daily ? 'AND substr(ts,1,10)=?2' : '';
+  const r = db.prepare(`SELECT
+      (SELECT COUNT(*) FROM visits WHERE barcode=?1 AND voided=0 ${W}) AS entries,
+      (SELECT COUNT(*) FROM plays  WHERE barcode=?1 AND voided=0 ${W}) AS used`).get(...(daily ? [code, day] : [code]));
+  const allowed = r.entries * per;
+  return { limited: true, per, daily, entries: r.entries, allowed, used: r.used, remaining: Math.max(0, allowed - r.used) };
+}
 function cardSummary(code) {
   const c = qCard.get(code);
   if (!c) return null;
@@ -69,7 +84,7 @@ function cardSummary(code) {
       (SELECT COALESCE(SUM(amount),0) FROM visits WHERE barcode=?1 AND voided=0) AS entry_paid,
       (SELECT MAX(ts) FROM visits WHERE barcode=?1 AND voided=0) AS last_visit,
       (SELECT COUNT(*) FROM visits WHERE barcode=?1 AND voided=0 AND substr(ts,1,10)=?2) AS visits_today`).get(code, today());
-  return { ...c, ...s, entered_today: s.visits_today > 0, balance: balance(code) };
+  return { ...c, ...s, entered_today: s.visits_today > 0, balance: balance(code), games: playsInfo(code) };
 }
 function requireCard(code) {
   const c = cardSummary(code);
@@ -106,7 +121,7 @@ route('GET', '/api/ping', () => ({ ok: true, time: now(), admin_pin: !!ADMIN_PIN
 // Настройки
 route('GET', '/api/settings', () => getSettings());
 route('PUT', '/api/settings', ({ body }) => {
-  const allowed = ['park_name', 'entry_fee', 'entry_points', 'currency', 'backup_dir', 'backup_interval'];
+  const allowed = ['park_name', 'entry_fee', 'entry_points', 'currency', 'backup_dir', 'backup_interval', 'plays_per_entry', 'plays_expire_daily'];
   const up = db.prepare('INSERT INTO settings(key,value) VALUES(?,?) ON CONFLICT(key) DO UPDATE SET value=excluded.value');
   for (const k of allowed) {
     if (body[k] === undefined) continue;
@@ -114,6 +129,8 @@ route('PUT', '/api/settings', ({ body }) => {
     if (k === 'entry_fee') { const n = Number(v); if (!(n >= 0)) throw bad('Невалидна цена на вход'); v = String(n); }
     if (k === 'entry_points') v = String(int(v, 'начални точки', { min: 0, max: 100000 }));
     if (k === 'backup_interval') v = String(int(v, 'интервал', { min: 5, max: 1440 }));
+    if (k === 'plays_per_entry') v = String(int(v, 'игри за един вход', { min: 0, max: 10000 }));
+    if (k === 'plays_expire_daily') v = body[k] === true || body[k] === '1' || body[k] === 1 ? '1' : '0';
     if (k === 'backup_dir') {
       v = str(body[k], 500);
       if (v) { try { backup.checkDir(backup.expandDir(v)); } catch (e) { throw bad(e.message); } }
@@ -140,7 +157,8 @@ route('GET', '/api/cards', ({ query }) => {
       (SELECT MAX(ts) FROM visits v WHERE v.barcode=c.barcode AND v.voided=0) AS last_visit
     FROM cards c WHERE c.barcode LIKE ?1 OR c.name LIKE ?1 OR c.phone LIKE ?1
     ORDER BY c.barcode LIMIT ?2`).all(q, limit);
-  for (const r of rows) r.balance = balance(r.barcode);
+  const st = getSettings();
+  for (const r of rows) { r.balance = balance(r.barcode); r.games_left = playsInfo(r.barcode, st).remaining; }
   return rows;
 });
 
@@ -258,6 +276,13 @@ route('POST', '/api/plays', ({ body }) => {
   if (!game) throw notFound('Няма такава игра');
   if (!game.active) throw bad('Играта е деактивирана');
   const points = body.points != null && body.points !== '' ? int(body.points, 'точки', { min: 0, max: 100000 }) : game.points;
+  const g = card.games;
+  if (g.limited && g.remaining <= 0) {
+    const when = g.daily ? ' днес' : '';
+    throw new HttpError(403, g.entries === 0
+      ? `Няма платен вход${when} – първо платете вход (${g.per} игри)`
+      : `Изиграни са всички ${g.allowed} игри${when} (${g.entries} ${g.entries === 1 ? 'вход' : 'входа'}). Платете нов вход за още ${g.per} игри.`);
+  }
   const r = db.prepare('INSERT INTO plays(barcode,game_id,game_name,points,ts) VALUES(?,?,?,?,?)')
     .run(code, game.id, game.name, points, now());
   const times = db.prepare('SELECT COUNT(*) AS n FROM plays WHERE barcode=? AND game_id=? AND voided=0').get(code, game.id).n;

@@ -51,7 +51,7 @@
     </div>
     <div class="panel" style="margin-top:16px">
       <div class="scroll" style="max-height:70vh">
-        <table><thead><tr><th>Баркод</th><th>Име</th><th>Телефон</th><th>Входове</th><th>Игри</th><th>Покупки</th><th>Баланс</th><th>Последен вход</th></tr></thead>
+        <table><thead><tr><th>Баркод</th><th>Име</th><th>Телефон</th><th>Входове</th><th>Игри</th><th>Покупки</th><th>Баланс</th><th>Остават игри</th><th>Последен вход</th></tr></thead>
         <tbody id="tCards"></tbody></table>
       </div>
       <p class="muted small" id="cardsCount"></p>
@@ -98,6 +98,8 @@
         <label>Цена на вход (само за статистика)</label><input id="sFee" type="number" min="0" step="0.01">
         <label>Валута</label><input id="sCur">
         <label>Начални точки при вход (0 = без)</label><input id="sPts" type="number" min="0">
+        <label>Игри за едно платено влизане (0 = без ограничение)</label><input id="sPlays" type="number" min="0">
+        <label style="display:flex; align-items:center; gap:8px; color:var(--text)"><input type="checkbox" id="sExpire" style="width:auto"> Неизползваните игри изгарят в края на деня</label>
         <div style="margin-top:14px"><button class="primary" id="sSave">Запази</button></div>
       </div>
       <div class="panel">
@@ -215,7 +217,7 @@ async function loadCards() {
     $('#tCards').innerHTML = rows.map((r) => `<tr data-card="${esc(r.barcode)}" style="cursor:pointer">
       <td><b>${esc(r.barcode)}</b> ${r.blocked ? '<span class="badge bad">блок.</span>' : ''}</td>
       <td>${esc(r.name || '—')}</td><td>${esc(r.phone || '')}</td>
-      <td>${r.visits}</td><td>${r.plays}</td><td>${r.purchases}</td><td>${r.balance}</td>
+      <td>${r.visits}</td><td>${r.plays}</td><td>${r.purchases}</td><td>${r.balance}</td><td>${r.games_left ?? '—'}</td>
       <td>${fmtTs(r.last_visit)}</td></tr>`).join('') || '<tr><td colspan="8" class="muted">Няма карти. Генерирайте ги от „Настройки“.</td></tr>';
     $('#cardsCount').textContent = `${rows.length} карти`;
     $$('#tCards [data-card]').forEach((tr) => tr.addEventListener('click', () => openCard(tr.dataset.card)));
@@ -249,6 +251,7 @@ async function openCard(code) {
           <div class="stat"><div class="v">${c.points_won}</div><div class="l">Спечелени точки</div></div>
           <div class="stat"><div class="v">${c.points_spent}</div><div class="l">Изхарчени точки</div></div>
           <div class="stat"><div class="v" style="color:var(--accent)">${c.balance}</div><div class="l">Баланс</div></div>
+          <div class="stat"><div class="v" style="color:${gamesColor(c.games)}">${gamesLeft(c.games)}</div><div class="l">Оставащи игри${c.games.daily ? ' (днес)' : ''}</div></div>
         </div>
         <div class="row" style="margin-top:12px">
           <input id="mAdj" type="number" placeholder="± точки" style="width:110px">
@@ -352,6 +355,7 @@ $('#pAdd').addEventListener('click', async () => {
 async function loadSettingsTab() {
   settings = await api('GET', '/api/settings');
   $('#sName').value = settings.park_name; $('#sFee').value = settings.entry_fee; $('#sCur').value = settings.currency; $('#sPts').value = settings.entry_points;
+  $('#sPlays').value = settings.plays_per_entry; $('#sExpire').checked = settings.plays_expire_daily !== '0';
   genPreview();
   loadBackup();
 }
@@ -391,7 +395,7 @@ $('#bkNow').addEventListener('click', async () => {
 
 $('#sSave').addEventListener('click', async () => {
   try {
-    settings = await api('PUT', '/api/settings', { park_name: $('#sName').value, entry_fee: $('#sFee').value, currency: $('#sCur').value, entry_points: $('#sPts').value });
+    settings = await api('PUT', '/api/settings', { park_name: $('#sName').value, entry_fee: $('#sFee').value, currency: $('#sCur').value, entry_points: $('#sPts').value, plays_per_entry: $('#sPlays').value, plays_expire_daily: $('#sExpire').checked });
     toast('Настройките са запазени', 'ok');
   } catch (e) { toast(e.message, 'bad'); }
 });

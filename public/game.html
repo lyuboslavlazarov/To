@@ -108,8 +108,10 @@ async function onScan(code) {
       <div class="big">${esc(c.name || 'Без име')} <span class="muted small">${esc(c.barcode)}</span></div>
       <div class="huge ok">+${r.points}</div>
       <div class="big">Баланс: <span style="color:var(--accent)">${pts(c.balance)}</span></div>
+      ${c.games.limited ? `<div class="big" style="margin-top:6px">Остават игри: <span style="color:${gamesColor(c.games)}; font-size:1.4em">${c.games.remaining}</span> <span class="muted small">от ${c.games.allowed}</span></div>` : ''}
       <p class="muted">Игра „${esc(game.name)}“ – ${r.times_this_game}-и път · общо ${c.plays} игри</p>
-      ${r.entered_today ? '' : '<p class="badge warn">⚠ Няма регистриран вход днес</p>'}
+      ${c.games.limited && c.games.remaining === 0 ? '<p class="badge warn">Това беше последната игра – за още игри е нужен нов вход</p>' : ''}
+      ${!c.games.limited && !r.entered_today ? '<p class="badge warn">⚠ Няма регистриран вход днес</p>' : ''}
       <div><button class="ghost sm" data-void="${r.play_id}">↩ Анулирай</button></div>`;
     bindVoid($('#result'));
     loadRecent();

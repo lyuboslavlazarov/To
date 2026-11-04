@@ -138,6 +138,9 @@ function todayStr() {
   const d = new Date(); const p = (n) => String(n).padStart(2, '0');
   return `${d.getFullYear()}-${p(d.getMonth() + 1)}-${p(d.getDate())}`;
 }
+/** Оставащи игри: „7 от 10“ или „без ограничение“ */
+function gamesLeft(g) { return !g || !g.limited ? 'без ограничение' : `${g.remaining} от ${g.allowed}`; }
+function gamesColor(g) { return !g || !g.limited ? 'var(--muted)' : g.remaining === 0 ? 'var(--bad)' : g.remaining <= 2 ? 'var(--warn)' : 'var(--ok)'; }
 function pts(n) { return `${Number(n || 0).toLocaleString('bg-BG')} т.`; }
 function money(n, cur = '€') { return `${Number(n || 0).toLocaleString('bg-BG', { maximumFractionDigits: 2 })} ${cur}`; }
 

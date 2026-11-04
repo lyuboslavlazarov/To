@@ -44,6 +44,7 @@
         <div class="stat"><div class="v" id="sPaid">0</div><div class="l">Общо платено (статистика)</div></div>
         <div class="stat"><div class="v" id="sPlays">0</div><div class="l">Изиграни игри</div></div>
         <div class="stat"><div class="v" id="sBalance">0</div><div class="l">Баланс точки</div></div>
+        <div class="stat"><div class="v" id="sGames">—</div><div class="l">Оставащи игри</div></div>
       </div>
       <p class="muted small" id="lastVisit"></p>
 
@@ -140,6 +141,8 @@ function fillForm(card, code) {
   $('#sPaid').textContent = money(c.entry_paid, settings.currency);
   $('#sPlays').textContent = c.plays || 0;
   $('#sBalance').textContent = pts(c.balance);
+  $('#sGames').textContent = card ? gamesLeft(c.games) : '—';
+  $('#sGames').style.color = card ? gamesColor(c.games) : '';
   $('#lastVisit').textContent = c.last_visit ? `Последен вход: ${fmtTs(c.last_visit)} (${weekday(c.last_visit)})` : 'Няма предишни входове.';
   let b = '';
   if (!card) b = '<span class="badge warn">НОВА КАРТА</span>';
@@ -162,7 +165,8 @@ function showResult(kind, html) {
 function entryResult(card, visitId) {
   showResult('ok', `<div class="row">
       <div class="grow"><div class="big ok">✅ Вход записан: ${money(card.last_amount ?? $('#fee').value, settings.currency)}</div>
-      <div>${esc(card.name || 'Без име')} · <b>${esc(card.barcode)}</b> · вход №${card.visits} · ${fmtTime(card.last_visit)}</div></div>
+      <div>${esc(card.name || 'Без име')} · <b>${esc(card.barcode)}</b> · вход №${card.visits} · ${fmtTime(card.last_visit)}</div>
+      ${card.games && card.games.limited ? `<div class="big" style="margin-top:4px">🎯 Остават игри: <span style="color:${gamesColor(card.games)}">${card.games.remaining}</span></div>` : ''}</div>
       <button class="ghost sm" id="undoEntry">↩ Отмени входа</button></div>`);
   $('#undoEntry').addEventListener('click', async () => {
     if (!confirm('Да се отмени ли записаният вход?')) return;

@@ -93,6 +93,7 @@ test('корекция и анулиране на игра', async () => {
   assert.equal(r.status, 400, 'не може под нула');
   r = await call('POST', '/api/cards/LP0003/adjust', { points: 50, reason: 'подарък' });
   assert.equal(r.data.balance, 50);
+  await call('POST', '/api/entry', { barcode: 'LP0003' });
   const p = (await call('POST', '/api/plays', { barcode: 'LP0003', game_id: 1, points: 7 })).data;
   r = await call('POST', `/api/plays/${p.play_id}/void`, {});
   assert.equal(r.data.card.balance, 50);
@@ -115,4 +116,34 @@ test('резервно копие в избрана папка', async () => {
   // невалидна папка се отказва
   r = await call('PUT', '/api/settings', { backup_dir: path.join(process.env.DB_FILE, 'x') });
   assert.equal(r.status, 400);
+});
+
+test('един платен вход = 10 игри', async () => {
+  let r = await call('POST', '/api/plays', { barcode: 'LP0010', game_id: 1 });
+  assert.equal(r.status, 403, 'без вход не може да се играе');
+  assert.match(r.data.error, /Няма платен вход/);
+  r = await call('POST', '/api/entry', { barcode: 'LP0010' });
+  assert.equal(r.data.card.games.remaining, 10);
+  for (let i = 1; i <= 10; i++) {
+    r = await call('POST', '/api/plays', { barcode: 'LP0010', game_id: 1 });
+    assert.equal(r.status, 200);
+    assert.equal(r.data.card.games.remaining, 10 - i);
+  }
+  r = await call('POST', '/api/plays', { barcode: 'LP0010', game_id: 1 });
+  assert.equal(r.status, 403, '11-тата игра се отказва');
+  assert.match(r.data.error, /Изиграни са всички 10 игри/);
+  // анулирана игра връща една игра
+  const last = (await call('GET', '/api/cards/LP0010/history')).data.plays[0];
+  r = await call('POST', `/api/plays/${last.id}/void`, {});
+  assert.equal(r.data.card.games.remaining, 1);
+  // нов платен вход -> още 10
+  r = await call('POST', '/api/entry', { barcode: 'LP0010' });
+  assert.equal(r.data.card.games.remaining, 11);
+  assert.equal((await call('GET', '/api/cards?q=LP0010')).data[0].games_left, 11);
+  // 0 = без ограничение
+  await call('PUT', '/api/settings', { plays_per_entry: 0 });
+  r = await call('POST', '/api/plays', { barcode: 'LP0011', game_id: 1 });
+  assert.equal(r.status, 200);
+  assert.equal(r.data.card.games.limited, false);
+  await call('PUT', '/api/settings', { plays_per_entry: 10 });
 });

@@ -117,6 +117,7 @@ function showCard() {
     <div class="row"><div class="grow"><div class="big">${esc(card.name || 'Без име')}</div><div class="muted">${esc(card.barcode)}</div></div>
     <button class="ghost sm" id="dropCard">✕</button></div>
     <div style="margin-top:8px">Баланс: <span class="big" style="color:var(--accent)">${pts(card.balance)}</span></div>
+    ${card.games && card.games.limited ? `<div class="muted">Остават игри: <b style="color:${gamesColor(card.games)}">${card.games.remaining}</b> от ${card.games.allowed}</div>` : ''}
     ${card.blocked ? '<span class="badge bad">БЛОКИРАНА</span>' : ''}`;
   $('#dropCard').addEventListener('click', () => { card = null; showCard(); render(); });
 }

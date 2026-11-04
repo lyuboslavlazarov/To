@@ -108,6 +108,8 @@ const DEFAULT_SETTINGS = {
   entry_fee: '20',
   entry_points: '0',
   currency: '€',
+  plays_per_entry: '10',     // игри за едно платено влизане (0 = без ограничение)
+  plays_expire_daily: '1',   // 1 = неизползваните игри изгарят в края на деня
 };
 const insSetting = db.prepare('INSERT OR IGNORE INTO settings(key, value) VALUES (?, ?)');
 for (const [k, v] of Object.entries(DEFAULT_SETTINGS)) insSetting.run(k, v);
