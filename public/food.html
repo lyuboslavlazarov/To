@@ -118,7 +118,7 @@ function showCard() {
     <button class="ghost sm" id="dropCard">✕</button></div>
     <div style="margin-top:8px">Баланс: <span class="big" style="color:var(--accent)">${pts(card.balance)}</span></div>
     ${card.games && card.games.limited ? `<div class="muted">Остават игри: <b style="color:${gamesColor(card.games)}">${card.games.remaining}</b> от ${card.games.allowed}</div>` : ''}
-    ${card.blocked ? '<span class="badge bad">БЛОКИРАНА</span>' : ''}`;
+    ${card.replaced_by ? `<span class="badge bad">ЗАМЕНЕНА С ${esc(card.replaced_by)}</span>` : card.blocked ? '<span class="badge bad">БЛОКИРАНА</span>' : ''}`;
   $('#dropCard').addEventListener('click', () => { card = null; showCard(); render(); });
 }
 
@@ -126,7 +126,8 @@ async function onScan(code) {
   try {
     card = await api('GET', '/api/cards/' + encodeURIComponent(code));
     beep(!card.blocked);
-    if (card.blocked) toast('Картата е блокирана', 'bad');
+    if (card.replaced_by) toast(`Картата е изгубена и заменена с ${card.replaced_by}`, 'bad', 5000);
+    else if (card.blocked) toast('Картата е блокирана', 'bad');
   } catch (e) { beep(false); toast(e.message, 'bad', 4000); card = null; }
   bumpIdle();
   showCard();

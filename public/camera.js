@@ -77,10 +77,14 @@ const CameraScanner = (() => {
         <label title="Камерата остава включена между сканиранията"><input type="checkbox" data-act="keep"> Включена</label></div>`;
     document.body.appendChild(panel);
     statusEl = panel.querySelector('.cam-status');
-    panel.querySelector('[data-act=close]').addEventListener('click', () => close(true));
+    panel.querySelector('[data-act=close]').addEventListener('click', () => {
+      const secondary = opts.secondary;
+      close(!secondary);
+      if (secondary && mainTarget) use(mainTarget);
+    });
     panel.querySelector('[data-act=switch]').addEventListener('click', switchCamera);
     const keep = panel.querySelector('[data-act=keep]');
-    keep.addEventListener('change', () => { opts.keepOpen = keep.checked; store.set('keep', keep.checked); });
+    keep.addEventListener('change', () => { opts.keepOpen = keep.checked; if (!opts.secondary) store.set('keep', keep.checked); });
     panel.classList.toggle('large', !!store.get('large', false));
     panel.querySelector('[data-act=size]').addEventListener('click', () => {
       panel.classList.toggle('large');
@@ -242,7 +246,7 @@ const CameraScanner = (() => {
     status('Сканирано: ' + code);
     busy = true;
     try { await onScanCb(code); } finally { busy = false; }
-    if (!opts.keepOpen) close(false);
+    if (!opts.keepOpen) { close(false); if (opts.secondary && mainTarget) use(mainTarget); }
   }
 
   async function listDevices() {
@@ -336,24 +340,52 @@ const CameraScanner = (() => {
   }
 
   /** Добавя бутон „📷“ към полето за сканиране. */
+  let mainTarget = null; // основното поле на екрана
+  let visibilityBound = false;
+
+  /**
+   * Добавя бутон „📷“ към поле за сканиране. Всяко поле има собствен получател –
+   * напр. полето за новата карта в прозореца „Изгубена карта“ не пречи на основното.
+   * options.secondary = true: еднократно сканиране, не се помни като „включена“.
+   */
   function attach(input, onScan, options = {}) {
     css();
-    onScanCb = onScan;
-    opts = { ...options, keepOpen: store.get('keep', !!options.keepOpen) };
+    const target = options.secondary
+      ? { onScan, opts: { ...options, keepOpen: false } }
+      : { onScan, opts: { ...options, keepOpen: store.get('keep', !!options.keepOpen) } };
+    if (!options.secondary && !mainTarget) mainTarget = target;
     const wrap = input.closest('.scan') || input.parentElement;
     const btn = document.createElement('button');
     btn.type = 'button';
     btn.className = 'cam-btn';
     btn.title = 'Сканирай с камерата';
     btn.textContent = '📷';
-    btn.addEventListener('click', (e) => { e.stopPropagation(); (panel && !panel.hidden) ? close(true) : open(); });
-    wrap.appendChild(btn);
-    // ако камерата е била оставена включена (монитор на игра, киоск) – включва се отново
-    if (opts.keepOpen && store.get('open', false) && window.isSecureContext) open();
-    document.addEventListener('visibilitychange', () => {
-      if (document.hidden) stopStream();
-      else if (panel && !panel.hidden && !stream && window.isSecureContext) open();
+    btn.addEventListener('click', (e) => {
+      e.stopPropagation();
+      if (panel && !panel.hidden && onScanCb === target.onScan) { close(!options.secondary); return; }
+      use(target);
+      open();
     });
+    wrap.appendChild(btn);
+    if (target === mainTarget) {
+      use(target);
+      // ако камерата е била оставена включена (монитор на игра, киоск) – включва се отново
+      if (opts.keepOpen && store.get('open', false) && window.isSecureContext) open();
+    }
+    if (!visibilityBound) {
+      visibilityBound = true;
+      document.addEventListener('visibilitychange', () => {
+        if (document.hidden) stopStream();
+        else if (panel && !panel.hidden && !stream && window.isSecureContext) open();
+      });
+    }
+    return { close: () => { if (onScanCb === target.onScan) { close(false); if (mainTarget) use(mainTarget); } } };
+  }
+
+  function use(target) {
+    onScanCb = target.onScan;
+    opts = target.opts;
+    if (panel) panel.querySelector('[data-act=keep]').checked = !!opts.keepOpen;
   }
 
   return { attach, open, close };

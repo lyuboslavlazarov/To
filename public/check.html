@@ -50,7 +50,7 @@ async function onScan(code) {
       ${c.games.limited ? `<div class="name">🎯 Остават игри: <span style="color:${gamesColor(c.games)}">${c.games.remaining}</span> <span class="sub">от ${c.games.allowed}</span></div>
         ${c.games.remaining === 0 ? '<div class="sub">За още игри платете нов вход</div>' : ''}` : ''}
       <div class="sub">Днес: ${playsToday.length} игри · Общо: ${c.plays} игри · ${c.visits} посещения</div>
-      ${c.blocked ? '<div class="badge bad">КАРТАТА Е БЛОКИРАНА</div>' : ''}
+      ${c.replaced_by ? `<div class="badge bad">ТАЗИ КАРТА Е ЗАМЕНЕНА С ${esc(c.replaced_by)} – използвайте новата карта</div>` : c.blocked ? '<div class="badge bad">КАРТАТА Е БЛОКИРАНА</div>' : ''}
       <div class="mini-list">
         <div class="panel">
           <h3>🎯 Последни игри</h3>

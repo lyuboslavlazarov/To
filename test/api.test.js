@@ -147,3 +147,55 @@ test('един платен вход = 10 игри', async () => {
   assert.equal(r.data.card.games.limited, false);
   await call('PUT', '/api/settings', { plays_per_entry: 10 });
 });
+
+test('замяна на изгубена карта', async () => {
+  await call('PUT', '/api/cards/LP0050', { name: 'Иво Тодоров', phone: '0887111222', age: 11 });
+  await call('POST', '/api/entry', { barcode: 'LP0050' });
+  for (let i = 0; i < 3; i++) await call('POST', '/api/plays', { barcode: 'LP0050', game_id: 1, points: 10 });
+  const before = (await call('GET', '/api/cards/LP0050')).data;
+  assert.equal(before.balance, 30);
+  assert.equal(before.games.remaining, 7);
+
+  // използвана карта не може да е нова
+  let r = await call('POST', '/api/cards/LP0050/replace', { new_barcode: 'LP0001' });
+  assert.equal(r.status, 400);
+  assert.match(r.data.error, /вече е използвана/);
+  // същата карта
+  r = await call('POST', '/api/cards/LP0050/replace', { new_barcode: 'lp0050' });
+  assert.equal(r.status, 400);
+
+  // замяна с неизползвана карта (съществуваща празна)
+  r = await call('POST', '/api/cards/LP0050/replace', { new_barcode: 'LP0051', reason: 'Изгубена' });
+  assert.equal(r.status, 200);
+  const c = r.data.card;
+  assert.equal(c.barcode, 'LP0051');
+  assert.equal(c.name, 'Иво Тодоров');
+  assert.equal(c.phone, '0887111222');
+  assert.equal(c.balance, 30);
+  assert.equal(c.games.remaining, 7);
+  assert.equal(c.visits, 1);
+  assert.equal(c.plays, 3);
+
+  // старата е блокирана и казва с коя е заменена
+  const old = (await call('GET', '/api/cards/LP0050')).data;
+  assert.equal(old.blocked, 1);
+  assert.equal(old.replaced_by, 'LP0051');
+  r = await call('POST', '/api/plays', { barcode: 'LP0050', game_id: 1 });
+  assert.equal(r.status, 403);
+  assert.match(r.data.error, /заменена с LP0051/);
+  // новата работи
+  r = await call('POST', '/api/plays', { barcode: 'LP0051', game_id: 1, points: 5 });
+  assert.equal(r.status, 200);
+  assert.equal(r.data.card.games.remaining, 6);
+
+  // повторна замяна на старата не е позволена; на новата – да (чисто нова карта, несъществуваща в базата)
+  r = await call('POST', '/api/cards/LP0050/replace', { new_barcode: 'LP0052' });
+  assert.equal(r.status, 400);
+  r = await call('POST', '/api/cards/LP0051/replace', { new_barcode: 'NEWCARD9' });
+  assert.equal(r.status, 200);
+  assert.equal(r.data.card.balance, 35);
+  assert.equal((await call('GET', '/api/cards/LP0050')).data.replaced_by, 'NEWCARD9', 'веригата води до последната карта');
+  const h = (await call('GET', '/api/cards/NEWCARD9/history')).data;
+  assert.equal(h.replacements.length, 1);
+  assert.equal(h.plays.length, 4);
+});

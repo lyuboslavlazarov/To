@@ -92,6 +92,7 @@ function bindScanner(input, onScan, cameraOptions = {}) {
   document.addEventListener('keydown', (e) => {
     const el = e.target;
     if (el === input || !(el instanceof HTMLInputElement || el instanceof HTMLTextAreaElement)) return;
+    if (el.closest('[data-own-scan], .modal-bg')) return; // полета със собствено сканиране (напр. „нова карта“)
     if (el instanceof HTMLInputElement && ['checkbox', 'radio', 'button', 'submit', 'date'].includes(el.type)) return;
     const t = performance.now();
     if (e.key === 'Enter') {

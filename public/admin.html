@@ -47,6 +47,7 @@
   <section id="tab-cards" class="hidden">
     <div class="row panel">
       <div class="scan grow" style="padding:6px 12px"><span class="icon">🔎</span><input id="cardSearch" placeholder="Търсене по баркод, име или телефон (или сканирайте)…"></div>
+      <button id="lostCardBtn">🔁 Изгубена карта</button>
       <a class="btn" id="printLink" href="/print.html" target="_blank">🖨 Печат баркодове</a>
     </div>
     <div class="panel" style="margin-top:16px">
@@ -143,6 +144,7 @@
 
 <script src="/common.js"></script>
 <script src="/camera.js"></script>
+<script src="/replace.js"></script>
 <script>
 let settings = {};
 const pinQ = () => (getPin() ? '&pin=' + encodeURIComponent(getPin()) : '');
@@ -215,7 +217,7 @@ async function loadCards() {
   try {
     const rows = await api('GET', '/api/cards?limit=5000&q=' + encodeURIComponent(q));
     $('#tCards').innerHTML = rows.map((r) => `<tr data-card="${esc(r.barcode)}" style="cursor:pointer">
-      <td><b>${esc(r.barcode)}</b> ${r.blocked ? '<span class="badge bad">блок.</span>' : ''}</td>
+      <td><b>${esc(r.barcode)}</b> ${r.replaced_by ? `<span class="badge bad">заменена → ${esc(r.replaced_by)}</span>` : r.blocked ? '<span class="badge bad">блок.</span>' : ''}</td>
       <td>${esc(r.name || '—')}</td><td>${esc(r.phone || '')}</td>
       <td>${r.visits}</td><td>${r.plays}</td><td>${r.purchases}</td><td>${r.balance}</td><td>${r.games_left ?? '—'}</td>
       <td>${fmtTs(r.last_visit)}</td></tr>`).join('') || '<tr><td colspan="8" class="muted">Няма карти. Генерирайте ги от „Настройки“.</td></tr>';
@@ -241,7 +243,10 @@ async function openCard(code) {
         <div class="grid2"><div><label>Телефон</label><input id="mPhone" value="${esc(c.phone)}"></div><div><label>Възраст</label><input id="mAge" type="number" value="${c.age ?? ''}"></div></div>
         <label>Бележка</label><input id="mNote" value="${esc(c.note)}">
         <div class="row" style="margin-top:10px"><button class="primary" id="mSave">Запази данните</button>
-        <button class="${c.blocked ? 'ok' : 'danger'}" id="mBlock">${c.blocked ? 'Отблокирай' : 'Блокирай (изгубена)'}</button></div>
+        ${c.replaced_by ? '' : `<button class="primary" id="mReplace">🔁 Замени с нова карта</button>`}
+        ${c.replaced_by ? '' : `<button class="${c.blocked ? 'ok' : 'danger'}" id="mBlock">${c.blocked ? 'Отблокирай' : 'Блокирай'}</button>`}</div>
+        ${c.replaced_by ? `<p class="result bad" style="margin-top:10px">Тази карта е обявена за изгубена и е заменена с <a href="#" data-goto="${esc(c.replaced_by)}"><b>${esc(c.replaced_by)}</b></a>. Историята е прехвърлена там.</p>` : ''}
+        ${h.replacements.filter((x) => x.new_barcode === c.barcode).map((x) => `<p class="muted small">🔁 Заменя изгубена карта <a href="#" data-goto="${esc(x.old_barcode)}">${esc(x.old_barcode)}</a> от ${fmtTs(x.ts)}${x.reason ? ' – ' + esc(x.reason) : ''}</p>`).join('')}
       </div>
       <div>
         <div class="stats">
@@ -290,7 +295,11 @@ async function openCard(code) {
 
   const act = async (fn, msg) => { try { await fn(); toast(msg, 'ok'); openCard(code); refreshActive(); } catch (e) { toast(e.message, 'bad', 4000); } };
   $('#mSave', bg).addEventListener('click', () => act(() => api('PUT', `/api/cards/${encodeURIComponent(code)}`, { name: $('#mName').value, phone: $('#mPhone').value, age: $('#mAge').value, note: $('#mNote').value }), 'Запазено'));
-  $('#mBlock', bg).addEventListener('click', () => act(() => api('POST', `/api/cards/${encodeURIComponent(code)}/block`, { blocked: !c.blocked }), c.blocked ? 'Отблокирана' : 'Блокирана'));
+  const mReplace = $('#mReplace', bg);
+  if (mReplace) mReplace.addEventListener('click', () => openReplaceCard({ preselect: code, onDone: () => refreshActive() }));
+  $$('[data-goto]', bg).forEach((a) => a.addEventListener('click', (e) => { e.preventDefault(); openCard(a.dataset.goto); }));
+  const mBlock = $('#mBlock', bg);
+  if (mBlock) mBlock.addEventListener('click', () => act(() => api('POST', `/api/cards/${encodeURIComponent(code)}/block`, { blocked: !c.blocked }), c.blocked ? 'Отблокирана' : 'Блокирана'));
   $('#mAdjBtn', bg).addEventListener('click', () => act(() => api('POST', `/api/cards/${encodeURIComponent(code)}/adjust`, { points: $('#mAdj').value, reason: $('#mAdjR').value }), 'Корекцията е записана'));
   $$('[data-void-play]', bg).forEach((b) => b.addEventListener('click', () => confirm('Анулиране на играта?') && act(() => api('POST', `/api/plays/${b.dataset.voidPlay}/void`, { admin: true }), 'Анулирано')));
   $$('[data-void-purchase]', bg).forEach((b) => b.addEventListener('click', () => confirm('Анулиране на покупката? Точките ще се върнат.') && act(() => api('POST', `/api/purchases/${b.dataset.voidPurchase}/void`, {}), 'Анулирано')));
@@ -416,6 +425,8 @@ $('#genPrint').addEventListener('click', () => {
   const g = genCodes();
   window.open(`/print.html?prefix=${encodeURIComponent(g.prefix)}&digits=${g.digits}&start=${g.start}&count=${g.count}`, '_blank');
 });
+
+$('#lostCardBtn').addEventListener('click', () => openReplaceCard({ onDone: () => refreshActive() }));
 
 // сканиране на карта с камерата в „Карти и посетители“
 CameraScanner.attach($('#cardSearch'), async (code) => { openTab('cards'); await openCard(code); });

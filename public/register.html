@@ -20,10 +20,13 @@
       <label style="margin:0; display:flex; align-items:center; gap:8px; color:var(--text); font-size:1em">
         <input type="checkbox" id="auto" style="width:auto; transform:scale(1.4)"> Записвай вход автоматично при сканиране
       </label>
+      <button type="button" class="ghost" id="lostCard" title="Замяна на изгубена карта с нова">🔁 Изгубена карта</button>
       <div class="grow"></div>
-      <label for="fee" style="margin:0">Цена на вход</label>
-      <input id="fee" type="number" min="0" step="0.01" style="width:110px">
-      <span id="cur"></span>
+      <span style="display:inline-flex; align-items:center; gap:8px; white-space:nowrap">
+        <label for="fee" style="margin:0">Цена на вход</label>
+        <input id="fee" type="number" min="0" step="0.01" style="width:90px">
+        <span id="cur"></span>
+      </span>
     </div>
 
     <div id="result" class="hidden" style="margin-top:16px"></div>
@@ -85,6 +88,7 @@
 
 <script src="/common.js"></script>
 <script src="/camera.js"></script>
+<script src="/replace.js"></script>
 <script>
 let settings = {};
 let current = null;      // баркод на отворената карта
@@ -207,7 +211,9 @@ async function onScan(code) {
   }
   if (card && card.blocked) {
     beep(false);
-    showResult('bad', `<div class="big bad">✖ Картата ${esc(code)} е блокирана</div>`);
+    showResult('bad', card.replaced_by
+      ? `<div class="big bad">✖ Картата ${esc(code)} е обявена за изгубена</div><div>Заменена е с <b>${esc(card.replaced_by)}</b>. Използвайте новата карта.</div>`
+      : `<div class="big bad">✖ Картата ${esc(code)} е блокирана</div>`);
     fillForm(card, code);
     return;
   }
@@ -291,6 +297,15 @@ $('#form').addEventListener('keydown', (e) => {
 $('#saveEntry').addEventListener('click', () => save(true));
 $('#saveInfo').addEventListener('click', () => save(false));
 $('#cancel').addEventListener('click', reset);
+$('#lostCard').addEventListener('click', () => openReplaceCard({
+  onDone: (card, oldCode) => {
+    enteredNow = false;
+    fillForm(card, card.barcode);
+    showResult('ok', `<div class="big ok">🔁 Картата е заменена: ${esc(oldCode)} → ${esc(card.barcode)}</div>
+      <div>${esc(card.name || 'Без име')} · ${pts(card.balance)} · оставащи игри: ${gamesLeft(card.games)}</div>`);
+    loadRecent();
+  },
+}));
 $('#auto').checked = getAuto();
 $('#auto').addEventListener('change', () => { setAuto($('#auto').checked); updateHints(); });
 $('#fee').addEventListener('input', updateHints);

@@ -89,6 +89,7 @@ function cardSummary(code) {
 function requireCard(code) {
   const c = cardSummary(code);
   if (!c) throw notFound(`Картата ${code} не е регистрирана в системата`);
+  if (c.replaced_by) throw new HttpError(403, `Картата ${code} е обявена за изгубена и е заменена с ${c.replaced_by}`);
   if (c.blocked) throw new HttpError(403, `Картата ${code} е блокирана`);
   return c;
 }
@@ -105,7 +106,8 @@ function cardHistory(code) {
   const byProduct = db.prepare(`SELECT i.name, SUM(i.qty) AS qty, SUM(i.qty*i.points) AS points
       FROM purchase_items i JOIN purchases p ON p.id=i.purchase_id
       WHERE p.barcode=? AND p.voided=0 GROUP BY i.name ORDER BY qty DESC`).all(code);
-  return { visits, plays, purchases, adjustments, byGame, byProduct };
+  const replacements = db.prepare('SELECT * FROM card_replacements WHERE new_barcode=? OR old_barcode=? ORDER BY id DESC').all(code, code);
+  return { visits, plays, purchases, adjustments, byGame, byProduct, replacements };
 }
 
 // ---------- API ----------
@@ -150,7 +152,7 @@ route('POST', '/api/backup', () => {
 route('GET', '/api/cards', ({ query }) => {
   const q = `%${str(query.q, 64)}%`;
   const limit = Math.min(Number(query.limit) || 1000, 5000);
-  const rows = db.prepare(`SELECT c.barcode, c.name, c.phone, c.age, c.blocked,
+  const rows = db.prepare(`SELECT c.barcode, c.name, c.phone, c.age, c.blocked, c.replaced_by,
       (SELECT COUNT(*) FROM visits v WHERE v.barcode=c.barcode AND v.voided=0) AS visits,
       (SELECT COUNT(*) FROM plays p WHERE p.barcode=c.barcode AND p.voided=0) AS plays,
       (SELECT COUNT(*) FROM purchases u WHERE u.barcode=c.barcode AND u.voided=0) AS purchases,
@@ -197,6 +199,43 @@ route('POST', '/api/cards/:code/block', ({ params, body }) => {
   db.prepare('UPDATE cards SET blocked=?, updated_at=? WHERE barcode=?').run(body.blocked ? 1 : 0, now(), code);
   return cardSummary(code);
 }, { admin: true });
+
+// Замяна на изгубена карта: старата не се сканира (намира се по име/телефон/номер),
+// сканира се само новата. Данните, точките, игрите и цялата история минават на новата карта,
+// а старата се блокира с отбелязване с коя карта е заменена.
+route('POST', '/api/cards/:code/replace', ({ params, body }) => {
+  const oldCode = normCode(params.code);
+  const newCode = normCode(body.new_barcode);
+  if (oldCode === newCode) throw bad('Новата карта трябва да е различна от старата');
+  const old = qCard.get(oldCode);
+  if (!old) throw notFound(`Няма карта ${oldCode}`);
+  if (old.replaced_by) throw bad(`Картата ${oldCode} вече е заменена с ${old.replaced_by}`);
+  const fresh = qCard.get(newCode);
+  if (fresh) {
+    if (fresh.replaced_by) throw bad(`Картата ${newCode} е стара (изгубена) карта – не може да се използва`);
+    if (fresh.blocked) throw bad(`Картата ${newCode} е блокирана`);
+    const used = db.prepare(`SELECT
+        (SELECT COUNT(*) FROM visits WHERE barcode=?1) + (SELECT COUNT(*) FROM plays WHERE barcode=?1)
+      + (SELECT COUNT(*) FROM purchases WHERE barcode=?1) + (SELECT COUNT(*) FROM adjustments WHERE barcode=?1) AS n`).get(newCode).n;
+    if (used > 0) throw bad(`Картата ${newCode} вече е използвана от друг посетител – вземете неизползвана карта`);
+  }
+  const t = now();
+  tx(() => {
+    if (fresh) {
+      db.prepare('UPDATE cards SET name=?, phone=?, age=?, note=?, updated_at=? WHERE barcode=?').run(old.name, old.phone, old.age, old.note, t, newCode);
+    } else {
+      db.prepare('INSERT INTO cards(barcode,name,phone,age,note,created_at,updated_at) VALUES(?,?,?,?,?,?,?)').run(newCode, old.name, old.phone, old.age, old.note, t, t);
+    }
+    for (const tbl of ['visits', 'plays', 'purchases', 'adjustments']) {
+      db.prepare(`UPDATE ${tbl} SET barcode=? WHERE barcode=?`).run(newCode, oldCode);
+    }
+    // ако старата карта е била заменила друга по-рано, веригата води до новата
+    db.prepare('UPDATE cards SET replaced_by=? WHERE replaced_by=?').run(newCode, oldCode);
+    db.prepare('UPDATE cards SET blocked=1, replaced_by=?, updated_at=? WHERE barcode=?').run(newCode, t, oldCode);
+    db.prepare('INSERT INTO card_replacements(old_barcode,new_barcode,reason,ts) VALUES(?,?,?,?)').run(oldCode, newCode, str(body.reason) || 'Изгубена карта', t);
+  });
+  return { old_barcode: oldCode, card: cardSummary(newCode) };
+}, { admin: !!process.env.REPLACE_REQUIRES_PIN });
 
 route('POST', '/api/cards/:code/adjust', ({ params, body }) => {
   const code = normCode(params.code);

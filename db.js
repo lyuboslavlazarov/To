@@ -101,7 +101,23 @@ CREATE TABLE IF NOT EXISTS adjustments (
   ts      TEXT NOT NULL
 );
 CREATE INDEX IF NOT EXISTS idx_adj_barcode ON adjustments(barcode);
+
+-- Замяна на изгубена карта: всичко от старата се прехвърля на новата
+CREATE TABLE IF NOT EXISTS card_replacements (
+  id          INTEGER PRIMARY KEY AUTOINCREMENT,
+  old_barcode TEXT NOT NULL,
+  new_barcode TEXT NOT NULL,
+  reason      TEXT NOT NULL DEFAULT '',
+  ts          TEXT NOT NULL
+);
+CREATE INDEX IF NOT EXISTS idx_repl_new ON card_replacements(new_barcode);
+CREATE INDEX IF NOT EXISTS idx_repl_old ON card_replacements(old_barcode);
 `);
+
+// Миграция на по-стари бази: колона „заменена с“
+if (!db.prepare("SELECT 1 FROM pragma_table_info('cards') WHERE name='replaced_by'").get()) {
+  db.exec('ALTER TABLE cards ADD COLUMN replaced_by TEXT');
+}
 
 const DEFAULT_SETTINGS = {
   park_name: 'Лунапарк',
