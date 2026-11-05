@@ -1,0 +1,13 @@
+{
+  "name": "chist-dom-club",
+  "version": "1.0.0",
+  "description": "Почистващи препарати: онлайн магазин с вземане от място, клуб с абонамент, училище за почистване, консултации, геймификация и админ панел",
+  "main": "server.js",
+  "private": true,
+  "engines": { "node": ">=22.13" },
+  "scripts": {
+    "start": "node --no-warnings server.js",
+    "seed": "node --no-warnings seed.js",
+    "test": "node --no-warnings --test test/*.test.js"
+  }
+}

@@ -1,0 +1,9 @@
+{
+  "name": "Чист Дом Клуб",
+  "short_name": "Чист Дом",
+  "start_url": "/",
+  "display": "standalone",
+  "background_color": "#f4f8f5",
+  "theme_color": "#1f8a62",
+  "icons": [{ "src": "/icon.svg", "sizes": "any", "type": "image/svg+xml" }]
+}

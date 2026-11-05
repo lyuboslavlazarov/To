@@ -1,0 +1,35 @@
+<!doctype html>
+<html lang="bg">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Админ панел</title>
+  <meta name="theme-color" content="#1f8a62">
+  <link rel="icon" href="/icon.svg">
+  <link rel="stylesheet" href="/style.css">
+</head>
+<body>
+  <header class="top">
+    <div class="wrap">
+      <a class="brand" href="#/">⚙️ <span>Админ</span></a>
+      <nav class="nav" id="nav">
+        <a href="#/">Табло</a>
+        <a href="#/orders">Поръчки</a>
+        <a href="#/pickup">Дати за вземане</a>
+        <a href="#/members">Членове и клуб</a>
+        <a href="#/products">Продукти</a>
+        <a href="#/school">Училище</a>
+        <a href="#/consult">Консултации</a>
+        <a href="#/notify">Известия</a>
+        <a href="#/feedback">Обратна връзка</a>
+        <a href="#/settings">Настройки</a>
+      </nav>
+      <a class="iconbtn" href="#/" title="Сигнали">🔔<span class="dot hidden" id="alertDot"></span></a>
+      <a class="iconbtn" href="/" title="Към магазина">🏠</a>
+    </div>
+  </header>
+  <main class="wrap" id="view"></main>
+  <script src="/common.js"></script>
+  <script src="/admin.js"></script>
+</body>
+</html>
