@@ -7,6 +7,14 @@
 <link rel="stylesheet" href="/style.css">
 <link rel="stylesheet" href="/fonts/fonts.css">
 <link rel="stylesheet" href="/theme/staff.css">
+<link rel="manifest" href="/staff.webmanifest">
+<meta name="theme-color" content="#070d2b">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="Лунапарк ★">
+<link rel="apple-touch-icon" href="/icons/staff-apple.png">
+<link rel="icon" href="/icons/staff-192.png">
 </head>
 <body>
 <header class="top">
@@ -15,19 +23,74 @@
   <span class="clock"></span>
 </header>
 <main>
-  <p class="muted">Изберете екран за това устройство. Всички устройства трябва да са в една мрежа със сървъра.</p>
-  <div class="tiles">
-    <a class="tile" href="/register.html"><div class="e">🎟️</div><h3>Пост за вход</h3><div class="muted">Въвеждане на информация за играещия и регистриране на платен вход</div></a>
+  <div id="pinned" class="panel hidden" style="margin-bottom:16px"></div>
+  <p class="muted">Изберете екран за това устройство. С „📌 Закачи“ таблетът или телефонът запомня екрана и се отваря направо в него.</p>
+  <div class="tiles" id="tiles">
+    <a class="tile" href="/register.html"><div class="e">🎟️</div><h3>Пост за вход</h3><div class="muted">Сканиране на картата, данни на играещия, платен вход и резервни карти</div></a>
     <a class="tile" href="/game.html"><div class="e">🎯</div><h3>Монитор на игра</h3><div class="muted">Сканиране на карта и добавяне на точки за конкретна игра</div></a>
-    <a class="tile" href="/food.html"><div class="e">🍔</div><h3>Зона за хранене</h3><div class="muted">POS терминал – продукти срещу точки от картата</div></a>
-    <a class="tile" href="/check.html"><div class="e">🔍</div><h3>Проверка на точки</h3><div class="muted">Монитор за посетителите – баланс и последни игри</div></a>
-    <a class="tile" href="/poster.html"><div class="e">📱</div><h3>Приложение за клиенти</h3><div class="muted">Плакат с QR код – клиентите инсталират приложението на телефона си</div></a>
+    <a class="tile" href="/food.html"><div class="e">🍔</div><h3>Зона за хранене</h3><div class="muted">Каса – продукти срещу точки, връщане на точки</div></a>
+    <a class="tile" href="/check.html"><div class="e">🔍</div><h3>Проверка на точки</h3><div class="muted">Екран за посетителите – точки, звезди и програма</div></a>
+    <a class="tile" href="/poster.html"><div class="e">📱</div><h3>Приложение за клиенти</h3><div class="muted">Плакат с QR код – клиентите добавят картата си в телефона</div></a>
     <a class="tile" href="/admin.html"><div class="e">📊</div><h3>Администрация</h3><div class="muted">Статистика, карти, игри, продукти, настройки</div></a>
+  </div>
+
+  <div class="velvet" style="margin-top:40px">
+    <div class="ribbon">Приложение за служителите</div>
+    <p style="margin-top:4px">Инсталирайте системата като приложение на всеки таблет и телефон – отваря се на цял екран с иконка ⭐🎡 на началния екран.</p>
+    <div class="grid2">
+      <div><b>📱 iPhone / iPad (Safari)</b><br><span class="small">„Сподели“ (квадратче със стрелка) → „Добави към началния екран“.</span></div>
+      <div><b>🤖 Android (Chrome)</b><br><span class="small">Бутон „⬇ Инсталирай“ горе или меню ⋮ → „Инсталиране на приложението“ / „Добавяне към началния екран“.</span></div>
+    </div>
+    <p class="small" style="margin-bottom:0">За камерата 📷 отворете защитения адрес (<span id="httpsAddr">https://…</span>) преди инсталиране. На компютър: бутон „⛶“ за цял екран.</p>
   </div>
 </main>
 <script src="/common.js"></script>
 <script>
+const PIN_KEY = 'device_screen';
+const getScreen = () => { try { return localStorage.getItem(PIN_KEY); } catch { return null; } };
+const setScreen = (v) => { try { v ? localStorage.setItem(PIN_KEY, v) : localStorage.removeItem(PIN_KEY); } catch { /* ignore */ } };
+const params = new URLSearchParams(location.search);
+
+// устройство със закачен екран се отваря направо в него (освен ако е избрано „Меню“)
+const pinned = getScreen();
+if (pinned && !params.has('menu')) location.replace(pinned);
+
+function renderPinned() {
+  const pin = getScreen();
+  const tile = pin && [...document.querySelectorAll('#tiles .tile')].find((t) => t.getAttribute('href') === pin);
+  $('#pinned').classList.toggle('hidden', !tile);
+  if (tile) {
+    $('#pinned').innerHTML = `<div class="row"><span class="grow">📌 Това устройство се отваря направо в: <b>${esc(tile.querySelector('h3').textContent)}</b></span>
+      <a class="btn primary" href="${esc(pin)}">Отвори</a><button class="ghost" id="unpin">Откачи</button></div>`;
+    $('#unpin').addEventListener('click', () => { setScreen(null); renderPinned(); toast('Екранът е откачен', 'ok'); });
+  }
+  document.querySelectorAll('#tiles .tile').forEach((t) => {
+    let b = t.querySelector('.pin');
+    if (!b) {
+      b = document.createElement('button');
+      b.type = 'button'; b.className = 'pin sm ghost'; b.style.marginTop = '12px';
+      b.addEventListener('click', (e) => {
+        e.preventDefault(); e.stopPropagation();
+        const href = t.getAttribute('href');
+        setScreen(getScreen() === href ? null : href);
+        renderPinned();
+        toast(getScreen() ? 'Закачено – устройството ще се отваря направо в този екран' : 'Откачено', 'ok', 3500);
+      });
+      t.appendChild(b);
+    }
+    const on = getScreen() === t.getAttribute('href');
+    b.textContent = on ? '📌 Закачен' : '📌 Закачи';
+    b.classList.toggle('primary', on);
+    b.classList.toggle('ghost', !on);
+    t.style.borderColor = on ? 'var(--gold)' : '';
+  });
+}
+renderPinned();
 api('GET', '/api/settings').then((s) => { $('#park').textContent = s.park_name; document.title = s.park_name; }).catch(() => {});
+api('GET', '/api/ping').then((p) => {
+  const host = /^(localhost|127\.)/.test(location.hostname) && p.lan_ip ? p.lan_ip : location.hostname;
+  $('#httpsAddr').textContent = p.https_port ? `https://${host}:${p.https_port}` : 'https не е включен';
+}).catch(() => {});
 </script>
 </body>
 </html>

@@ -208,4 +208,36 @@ function station(defaultName) {
 document.addEventListener('DOMContentLoaded', () => {
   const c = $('header.top .clock');
   if (c) startClock(c);
+  staffAppButtons();
 });
+
+// ---------- приложение за служителите ----------
+let installEvt = null;
+const isStandalone = () => matchMedia('(display-mode: standalone)').matches || navigator.standalone === true;
+addEventListener('beforeinstallprompt', (e) => { e.preventDefault(); installEvt = e; const b = $('#appInstall'); if (b) b.classList.remove('hidden'); });
+if ('serviceWorker' in navigator && window.isSecureContext && document.querySelector('link[rel="manifest"][href="/staff.webmanifest"]')) {
+  navigator.serviceWorker.register('/sw-staff.js').catch(() => { /* напр. самоподписан сертификат – приложението работи и без него */ });
+}
+function staffAppButtons() {
+  const header = $('header.top');
+  if (!header || $('#appFull')) return;
+  const clock = $('.clock', header);
+  const mk = (id, text, title, cls = '') => {
+    const b = document.createElement('button');
+    b.id = id; b.type = 'button'; b.className = `ghost sm ${cls}`; b.textContent = text; b.title = title;
+    header.insertBefore(b, clock || null);
+    return b;
+  };
+  const inst = mk('appInstall', '⬇ Инсталирай', 'Инсталирай като приложение на това устройство', 'hidden');
+  inst.addEventListener('click', async () => { if (!installEvt) return; installEvt.prompt(); await installEvt.userChoice; installEvt = null; inst.classList.add('hidden'); });
+  if (installEvt) inst.classList.remove('hidden');
+  if (document.fullscreenEnabled && !isStandalone()) {
+    const full = mk('appFull', '⛶', 'Цял екран');
+    full.addEventListener('click', () => (document.fullscreenElement ? document.exitFullscreen() : document.documentElement.requestFullscreen()).catch(() => {}));
+  }
+  if (clock) clock.style.marginLeft = '0';
+  const spacer = document.createElement('span'); spacer.style.marginLeft = 'auto';
+  header.insertBefore(spacer, inst);
+}
+addEventListener('offline', () => toast('📡 Няма връзка със сървъра – действията няма да се запишат', 'bad', 8000));
+addEventListener('online', () => toast('Връзката е възстановена ✔', 'ok'));

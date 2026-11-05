@@ -44,7 +44,7 @@ header.top button.ghost { border-color: var(--gold); color: var(--accent2); back
 .stat .v { color: var(--accent2); }
 input, select, textarea { background: rgba(8, 14, 44, .85); border-color: rgba(232, 196, 106, .3); color: var(--text); }
 button, .btn { background: #26306e; }
-button.primary { background: linear-gradient(180deg, #ffe08a, #e8b84a); color: #3a2400; box-shadow: 0 0 14px rgba(255, 200, 80, .3); }
+button.primary, .btn.primary { background: linear-gradient(180deg, #ffe08a, #e8b84a); color: #3a2400; box-shadow: 0 0 14px rgba(255, 200, 80, .3); }
 button.ghost { background: transparent; }
 .tabs button { background: rgba(8, 14, 44, .7); }
 .tabs button.active { background: linear-gradient(180deg, #ffe08a, #e8b84a); color: #3a2400; }

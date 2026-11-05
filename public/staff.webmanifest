@@ -1,0 +1,17 @@
+{
+  "name": "Рождествен Лунапарк – служители",
+  "short_name": "Лунапарк ★",
+  "description": "Вход, игри, зона за хранене, проверка на точки и администрация на лунапарка.",
+  "lang": "bg",
+  "id": "/?staff-app",
+  "start_url": "/?app=1",
+  "scope": "/",
+  "display": "standalone",
+  "orientation": "any",
+  "background_color": "#070d2b",
+  "theme_color": "#070d2b",
+  "icons": [
+    { "src": "/icons/staff-192.png", "sizes": "192x192", "type": "image/png", "purpose": "any maskable" },
+    { "src": "/icons/staff-512.png", "sizes": "512x512", "type": "image/png", "purpose": "any maskable" }
+  ]
+}
