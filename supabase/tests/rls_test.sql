@@ -43,7 +43,8 @@ where (t.name = 'Видео' and p.email in ('video.lead@test.bg', 'video@test.b
    or (t.name = 'Група 3–4 г.' and p.email = 'kids34@test.bg')
    or (t.name = 'Група 5–6 г.' and p.email = 'kids56@test.bg');
 
-insert into profile_notes (profile_id, body) select id, 'Поверителна бележка' from profiles where email = 'video@test.bg';
+insert into profile_notes (profile_id, body, is_private) select id, 'Обикновена бележка', false from profiles where email = 'video@test.bg';
+insert into profile_notes (profile_id, body, is_private) select id, 'Лична бележка от среща', true from profiles where email = 'video@test.bg';
 
 -- ---------- Чакащ одобрение ----------
 set role authenticated;
@@ -110,11 +111,12 @@ select t_login('00000000-0000-0000-0000-0000000000a1', 'aal1');
 select t_assert(not is_admin(), 'админ без 2FA няма админ права');
 select t_login('00000000-0000-0000-0000-0000000000a1', 'aal2');
 select t_assert(is_admin(), 'админ с 2FA има права');
-select t_assert((select count(*) = 0 from profile_notes), 'бележките са само за ръководството (не и за админа)');
+select t_assert((select count(*) = 1 and bool_and(not is_private) from profile_notes), 'админът вижда само обикновените бележки, не личните');
+select t_fails($$insert into profile_notes (profile_id, body, is_private) select id, 'х', true from profiles limit 1$$, 'админът не може да пише лични бележки');
 select t_assert((select count(*) > 0 from audit_log), 'админът вижда одитния журнал');
 
 select t_login('00000000-0000-0000-0000-0000000000b1');
-select t_assert((select count(*) = 1 from profile_notes), 'ръководството вижда бележките');
+select t_assert((select count(*) = 2 from profile_notes), 'ръководството вижда всички бележки, вкл. личните');
 select t_assert((select count(*) = 0 from audit_log), 'ръководството не вижда одита');
 
 -- ---------- Помещения без конфликти ----------

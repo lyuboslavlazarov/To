@@ -23,7 +23,7 @@ export default async function PersonPage({ params }: { params: Promise<{ id: str
     supabase.from('member_positions').select('position_id').eq('profile_id', id),
     supabase.from('assignments').select('id, status, events(id, title, starts_at), positions(name), teams(name)').eq('profile_id', id).order('created_at', { ascending: false }).limit(50),
     me.can('gifts') || me.id === id ? supabase.from('gifts').select('*').eq('profile_id', id).order('given_on', { ascending: false }) : Promise.resolve({ data: null }),
-    me.isLeadership ? supabase.from('profile_notes').select('*, author:profiles!profile_notes_author_id_fkey(first_name, last_name)').eq('profile_id', id).order('created_at', { ascending: false }) : Promise.resolve({ data: null }),
+    me.isLeadership || me.isAdmin ? supabase.from('profile_notes').select('*, author:profiles!profile_notes_author_id_fkey(first_name, last_name)').eq('profile_id', id).order('created_at', { ascending: false }) : Promise.resolve({ data: null }),
   ])
   const myPos = new Set((mpos ?? []).map((m) => m.position_id))
   const sortedHistory = (history ?? []).filter((h: any) => h.events).sort((a: any, b: any) => b.events.starts_at.localeCompare(a.events.starts_at))
@@ -162,15 +162,20 @@ export default async function PersonPage({ params }: { params: Promise<{ id: str
           )}
 
           {notes && (
-            <Card title="🔒 Бележки (само ръководството)">
+            <Card title="🔒 Бележки">
+              <p className="muted mb-2 text-xs">Обикновените бележки виждат ръководството и администраторът. Личните бележки от срещи – само ръководството.</p>
               <ActionForm action={addNote} className="mb-3 space-y-2" resetOnOk>
                 <input type="hidden" name="profile_id" value={id} />
-                <textarea name="body" rows={3} className="input" placeholder="Поверителна бележка…" required />
+                <textarea name="body" rows={3} className="input" placeholder="Бележка…" required />
+                {me.isLeadership && (
+                  <label className="flex items-center gap-2 text-sm"><input type="checkbox" name="is_private" />🤝 Лична бележка от среща (само за ръководството)</label>
+                )}
                 <SubmitButton className="btn-primary btn-sm">Добави бележка</SubmitButton>
               </ActionForm>
               <ul className="space-y-3 text-sm">
                 {notes.map((n: any) => (
-                  <li key={n.id} className="rounded-xl bg-amber-50 p-3 dark:bg-amber-900/20">
+                  <li key={n.id} className={`rounded-xl p-3 ${n.is_private ? 'bg-violet-50 dark:bg-violet-900/20' : 'bg-amber-50 dark:bg-amber-900/20'}`}>
+                    {n.is_private && <div className="mb-1"><Badge color="blue">🤝 Лична – само ръководството</Badge></div>}
                     <p className="whitespace-pre-line">{n.body}</p>
                     <div className="muted mt-1 flex items-center justify-between text-xs">
                       <span>{fullName(n.author)} · {fmtDateTime(n.created_at)}</span>

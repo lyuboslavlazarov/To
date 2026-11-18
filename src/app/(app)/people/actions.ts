@@ -42,7 +42,7 @@ export async function addNote(_: unknown, fd: FormData): Promise<Result> {
   const supabase = await createClient()
   const body = str(fd, 'body')
   if (!body) return { error: 'Празна бележка' }
-  const { error } = await supabase.from('profile_notes').insert({ profile_id: str(fd, 'profile_id'), body, author_id: me.id })
+  const { error } = await supabase.from('profile_notes').insert({ profile_id: str(fd, 'profile_id'), body, author_id: me.id, is_private: me.isLeadership && bool(fd, 'is_private') })
   if (error) return { error: dbError(error) }
   revalidatePath(`/people/${str(fd, 'profile_id')}`)
   return { ok: 'Бележката е добавена' }
