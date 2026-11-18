@@ -172,4 +172,12 @@ reset role; select t_login(null);
 select t_assert(generate_due_checklists(14) > 0, 'генериране на чеклисти');
 
 reset role; select t_login(null);
+
+-- ---------- Кандидати за позиция (лидер) ----------
+set role authenticated;
+select t_login('00000000-0000-0000-0000-0000000000c1');
+select t_assert((select count(*) >= 2 from event_team_candidates((select id from events order by starts_at limit 1), (select id from teams where name = 'Видео'))), 'лидерът вижда кандидатите');
+select t_login('00000000-0000-0000-0000-0000000000d1');
+select t_assert((select count(*) = 0 from event_team_candidates((select id from events order by starts_at limit 1), (select id from teams where name = 'Видео'))), 'чужд не вижда кандидатите на Видео');
+reset role; select t_login(null);
 select 'ВСИЧКИ ТЕСТОВЕ МИНАХА ✔' as result;
